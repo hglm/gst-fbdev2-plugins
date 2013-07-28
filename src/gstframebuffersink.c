@@ -21,7 +21,7 @@
  *
  * The GstFramebufferSink class implements an optimized video sink
  * for the Linux console framebuffer. It used as the basis for the
- * fbdevsink2 plugin. It can write directly into video memory with
+ * fbdev2sink plugin. It can write directly into video memory with
  * page flipping support, and should be usable by a wide variety of
  * devices. The class can derived for device-specific implementations
  * with hardware acceleration.
@@ -232,19 +232,6 @@ gst_framebuffersink_class_init (GstFramebufferSinkClass* klass)
                           "performs vsync automatically or otherwise doesn't need a vsync call "
                           "around it.",
                           FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
-#if 0
-  /* Setting up pads and setting metadata should be moved to
-     base_class_init if you intend to subclass this class. */
-  gst_element_class_add_pad_template (GST_ELEMENT_CLASS(klass),
-      gst_static_pad_template_get (&gst_framebuffersink_sink_template));
-
-  gst_element_class_set_static_metadata (GST_ELEMENT_CLASS(klass),
-      "Accelerated console framebuffer video sink for fbdev-based devices",
-      "Sink/Video",
-      "fbdev2 sink",
-      "Harm Hanemaaijer <fgenfb@yahoo.com>");
-#endif
 
   base_sink_class->start = GST_DEBUG_FUNCPTR (gst_framebuffersink_start);
   base_sink_class->stop = GST_DEBUG_FUNCPTR (gst_framebuffersink_stop);
@@ -511,13 +498,17 @@ gst_framebuffersink_open_device(GstFramebufferSink *framebuffersink) {
     kd_fd = open ("/dev/tty0", O_RDWR);
     if (kd_fd < 0)
         goto error_setting_graphics_mode;
-    if (ioctl(kd_fd, KDGETMODE, &framebuffersink->saved_kd_mode) < 0)
+    if (ioctl (kd_fd, KDGETMODE, &framebuffersink->saved_kd_mode) < 0)
         goto error_setting_graphics_mode;
-    if (ioctl(kd_fd, KDSETMODE, KD_GRAPHICS) < 0)
+    if (ioctl (kd_fd, KDSETMODE, KD_GRAPHICS) < 0)
         goto error_setting_graphics_mode;
-    GST_FRAMEBUFFERSINK_INFO_OBJECT(framebuffersink, "Setting console to KD_GRAPHICS mode");
+    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "Setting console to KD_GRAPHICS mode");
     close (kd_fd);
   }
+
+  // Create and clear the framebuffer allocation table.
+  framebuffersink->buffer_allocation_table = malloc (framebuffersink->max_framebuffers);
+  memset (framebuffersink->buffer_allocation_table, 0, framebuffersink->max_framebuffers);
 
   return TRUE;
 
@@ -548,7 +539,7 @@ gst_framebuffersink_set_device_virtual_size(GstFramebufferSink *framebuffersink,
 }
 
 static void
-gst_framebuffersink_clear_screen(GstFramebufferSink *framebuffersink, int index) {
+gst_framebuffersink_clear_screen (GstFramebufferSink *framebuffersink, int index) {
   memset(framebuffersink->framebuffer +
       index * framebuffersink->fixinfo.line_length * framebuffersink->varinfo.yres,
       0, framebuffersink->fixinfo.line_length * framebuffersink->varinfo.yres);
@@ -579,7 +570,7 @@ gst_framebuffersink_put_image_memcpy (GstFramebufferSink * framebuffersink, uint
 }
 
 static void
-gst_framebuffersink_wait_for_vsync(GstFramebufferSink * framebuffersink)
+gst_framebuffersink_wait_for_vsync (GstFramebufferSink * framebuffersink)
 {
   if (ioctl (framebuffersink->fd, FBIO_WAITFORVSYNC, NULL)) {
     GST_ERROR_OBJECT(framebuffersink, "FBIO_WAITFORVSYNC call failed. Disabling vsync.");
@@ -588,14 +579,13 @@ gst_framebuffersink_wait_for_vsync(GstFramebufferSink * framebuffersink)
 }
 
 static void
-gst_framebuffersink_pan_display(GstFramebufferSink * framebuffersink, int xoffset,
+gst_framebuffersink_pan_display (GstFramebufferSink * framebuffersink, int xoffset,
 int yoffset) {
   int old_xoffset = framebuffersink->varinfo.xoffset;
   int old_yoffset = framebuffersink->varinfo.yoffset;
   framebuffersink->varinfo.xoffset = xoffset;
   framebuffersink->varinfo.yoffset = yoffset;
   if (ioctl (framebuffersink->fd, FBIOPAN_DISPLAY, &framebuffersink->varinfo)) {
-    g_print("Failed\n");
     GST_ERROR_OBJECT (framebuffersink, "FBIOPAN_DISPLAY call failed");
     framebuffersink->varinfo.xoffset = old_xoffset;
     framebuffersink->varinfo.yoffset = old_yoffset;
@@ -603,7 +593,7 @@ int yoffset) {
 }
 
 static void
-gst_framebuffersink_pan_to_framebuffer(GstFramebufferSink * framebuffersink, int buffer) {
+gst_framebuffersink_pan_to_framebuffer (GstFramebufferSink * framebuffersink, int buffer) {
   gst_framebuffersink_pan_display(framebuffersink, 0, framebuffersink->varinfo.yres * buffer);
 }
 
@@ -715,7 +705,7 @@ unknown_format:
 
 /* Debugging function. */
 
-static void gst_buffer_print(GstFramebufferSink *framebuffersink, GstBuffer *buf)
+static void gst_buffer_print (GstFramebufferSink *framebuffersink, GstBuffer *buf)
 {
   GstMemory *memory;
   GstMapInfo mapinfo;
@@ -736,7 +726,7 @@ static void gst_buffer_print(GstFramebufferSink *framebuffersink, GstBuffer *buf
 /* use_buffer_pool=true. */
 
 static gboolean
-gst_framebuffersink_allocate_buffer_pool(GstFramebufferSink * framebuffersink, GstCaps *caps,
+gst_framebuffersink_allocate_buffer_pool (GstFramebufferSink * framebuffersink, GstCaps *caps,
 GstVideoInfo *info) {
   GstStructure *config;
   GstBufferPool *newpool, *oldpool;
@@ -856,10 +846,6 @@ gst_framebuffersink_set_caps (GstBaseSink * sink, GstCaps * caps)
   if (framebuffersink->videosink.width <= 0 || framebuffersink->videosink.height <= 0)
     goto no_display_size;
 
-  // Create and clear the framebuffer allocation table.
-  framebuffersink->buffer_allocation_table = malloc(framebuffersink->max_framebuffers);
-  memset(framebuffersink->buffer_allocation_table, 0, framebuffersink->max_framebuffers);
-
   if (framebuffersink->flip_buffers > 0) {
     if (framebuffersink->flip_buffers < framebuffersink->max_framebuffers)
       framebuffersink->max_framebuffers = framebuffersink->flip_buffers;
@@ -951,6 +937,8 @@ gst_framebuffersink_stop (GstBaseSink * sink)
 
   GST_DEBUG_OBJECT (framebuffersink, "stop");
 
+  free (framebuffersink->buffer_allocation_table);
+
   gst_framebuffersink_pan_display(framebuffersink, 0, 0);
 
   g_mutex_lock (&framebuffersink->flow_lock);
@@ -987,7 +975,7 @@ gst_framebuffersink_stop (GstBaseSink * sink)
 /* streamed into video memory. */
 
 static GstFlowReturn
-gst_framebuffersink_show_frame_memcpy(GstFramebufferSink *framebuffersink, GstBuffer *buffer) {
+gst_framebuffersink_show_frame_memcpy (GstFramebufferSink *framebuffersink, GstBuffer *buffer) {
   GstMapInfo mapinfo = GST_MAP_INFO_INIT;
   GstMemory *mem;
 
@@ -1184,7 +1172,7 @@ config_failed:
 /* Create our own simple allocator for video memory buffers. */
 
 static int
-gst_framebuffersink_find_free_framebuffer_slot(GstFramebufferSink *framebuffersink) {
+gst_framebuffersink_find_free_framebuffer_slot (GstFramebufferSink *framebuffersink) {
   int i;
   for (i = 0; i < framebuffersink->nu_framebuffers_used; i++)
     if (framebuffersink->buffer_allocation_table[i] == 0) {
@@ -1195,7 +1183,7 @@ gst_framebuffersink_find_free_framebuffer_slot(GstFramebufferSink *framebuffersi
 }
 
 static void
-gst_framebuffersink_free_framebuffer_slot(GstFramebufferSink *framebuffersink, int i) {
+gst_framebuffersink_free_framebuffer_slot (GstFramebufferSink *framebuffersink, int i) {
   if (framebuffersink->buffer_allocation_table[i] == 1) {
       framebuffersink->buffer_allocation_table[i] = 0;
       return;
@@ -1219,7 +1207,7 @@ GstFramebufferSink * framebuffersink) {
 }
 
 static GstMemory *
-gst_framebuffersink_allocator_alloc(GstAllocator * allocator, gsize size,
+gst_framebuffersink_allocator_alloc (GstAllocator * allocator, gsize size,
 GstAllocationParams *params) {
   GstFramebufferSinkAllocator * framebuffersink_allocator =
       GST_FRAMEBUFFERSINK_ALLOCATOR (allocator);

@@ -42,7 +42,10 @@ This line runs playbin with fbdev2sink configured with the given parameters.
 The property setting graphics-mode=true can be set to force console graphics
 mode (KD_GRAPHICS, reducing interference from the text console and cursor,
 but textmode may not always be restored in case of a crash so it is handy
-to keep a utility around to restore the console to textmode (KD_TEXT).
+to keep a utility around to restore the console to textmode (KD_TEXT). Using
+the Magic-SysRq sequence Alt-SysRq-V may also help. Another reason for loss
+of textmode is that the display start address is not properly restored;
+switching consoles helps in this case.
 
 Run "gst-inspect-1.0 fbdev2sink" for an overview of configurable property
 settings.
