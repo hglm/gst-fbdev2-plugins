@@ -1,0 +1,65 @@
+*** Overview ***
+
+This repository implements an optimized GStreamer 1.0-based video sink
+for the Linux console framebuffer. It is implemented in a base class
+called GstFramebufferSink in the library libframebuffersink, and a
+plugin implementation called 'fbdev2sink that doesn't add any features
+over the base class library, suitable for most Linux framebuffer
+devices.
+
+A preliminary plugin called "sunxifbsink" for Allwinner-based devices
+is also provided, also based on libframebuffersink. At the moment it
+does nothing extra except change the name.
+
+This is work-in-progress although the plugin should be quite usable in
+its current form.
+
+The main features are direct rendering into video memory (instead of
+the two-pass memcpy implementation of the regular fbdevsink plugin) and
+support for page flipping/vsync, and several configurable properties
+regulating video output and linux framebuffer configuration.
+
+*** Usage ***
+
+Example launch line:
+
+gst-launch-1.0 videotestsrc horizontal-speed=5 ! fbdev2sink buffer-pool=true \
+native-resolution=true fps=30 >output
+
+This line uses direct streaming into video memory (buffer-pool=true), forces
+the window size to the native full-screen resolution (native-resolution=true),
+sets the frames per second to 30, and the text output is directed into the
+file output. If everything is working correctly this should show a tear-free,
+multi-buffered scrolling image. Verify the file "output" to see whether any
+features were disabled and everything is working correctly.
+
+gst-launch-1.0 playbin uri=file:///home/me/videos/video.mp4 \
+video-sink="fbdev2sink buffer-pool=false native-resolution=true \
+graphics-mode=true pan-does-vsync=true" >output
+
+This line runs playbin with fbdev2sink configured with the given parameters.
+
+The property setting graphics-mode=true can be set to force console graphics
+mode (KD_GRAPHICS, reducing interference from the text console and cursor,
+but textmode may not always be restored in case of a crash so it is handy
+to keep a utility around to restore the console to textmode (KD_TEXT).
+
+Run "gst-inspect-1.0 fbdev2sink" for an overview of configurable property
+settings.
+
+*** Installation ***
+
+On a Debian-based system, GStreamer 1.0 and a number of associated
+development packages need to be installed. These include:
+
+	libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libglib2.0-dev
+
+Run autogen.sh, then make, and sudo make install.
+
+By default the plugins and library are installed into
+/usr/local/lib/gstreamer-1.0 and /usr/local/lib/. You need to set the
+GST_PLUGIN_PATH environment library to /usr/local/lib/gstreamer-1.0 for the
+plugins to be recognized. Also run sudo ldconfig after installing;
+/usr/local/lib must be in the ldconfig search path.
+
+Run gst-inspect-1.0 fbdev2sink to verify everything is installed correctly.
