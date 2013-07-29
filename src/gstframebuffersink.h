@@ -27,6 +27,11 @@
 
 G_BEGIN_DECLS
 
+typedef enum { GST_FRAMEBUFFERSINK_OVERLAY_YUV420, GST_FRAMEBUFFERSINK_OVERLAY_BGRX32 }
+    GstFramebufferSinkOverlayType;
+#define GST_FRAMEBUFFERSINK_OVERLAY_TYPE_FIRST GST_FRAMEBUFFERSINK_OVERLAY_YUV420
+#define GST_FRAMEBUFFERSINK_OVERLAY_TYPE_LAST GST_FRAMEBUFFERSINK_OVERLAY_BGRX32
+
 /* Forward declaration. */
 
 typedef struct _GstFramebufferSinkAllocator GstFramebufferSinkAllocator;
@@ -37,7 +42,9 @@ typedef struct _GstFramebufferSinkAllocator GstFramebufferSinkAllocator;
 #define GST_FRAMEBUFFERSINK(obj)   (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FRAMEBUFFERSINK,GstFramebufferSink))
 #define GST_FRAMEBUFFERSINK_CLASS(klass)   (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FRAMEBUFFERSINK,GstFramebufferSinkClass))
 #define GST_IS_FRAMEBUFFERSINK(obj)   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FRAMEBUFFERSINK))
-#define GST_IS_FRAMEBUFFERSINK_CLASS(obj)   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FRAMEBUFFERSINK))
+#define GST_IS_FRAMEBUFFERSINK_CLASS(klass)   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FRAMEBUFFERSINK))
+#define GST_FRAMEBUFFERSINK_GET_CLASS(klass) \
+  (G_TYPE_INSTANCE_GET_CLASS ((klass), GST_TYPE_FRAMEBUFFER_SINK, GstFramebufferSinkClass))
 
 typedef struct _GstFramebufferSink GstFramebufferSink;
 typedef struct _GstFramebufferSinkClass GstFramebufferSinkClass;
@@ -50,7 +57,7 @@ struct _GstFramebufferSink
   /* Configurable properties. */
   gboolean silent;
   gboolean native_resolution;
-  gboolean hardware_scaling;
+  gboolean use_hardware_overlay;
   gboolean clear;
   gint requested_video_width;
   gint requested_video_height;
@@ -72,10 +79,18 @@ struct _GstFramebufferSink
   int endianness;
   int max_framebuffers;
   GQuark framebuffer_address_quark;
+  uint8_t hardware_overlay_types_supported[GST_FRAMEBUFFERSINK_OVERLAY_TYPE_LAST -
+      GST_FRAMEBUFFERSINK_OVERLAY_TYPE_FIRST + 1];
   /* Variable device parameters. */
   struct fb_var_screeninfo varinfo;
   int nu_framebuffers_used;
   int current_framebuffer_index;
+  int nu_overlays_used;
+  int current_overlay_index;
+  /* Video memory buffer allocation management. */
+  gsize allocation_size;
+  guintptr allocation_start_offset;
+  int buffer_allocation_table_size;
   uint8_t *buffer_allocation_table;
 
   /* Video information. */
@@ -95,6 +110,11 @@ struct _GstFramebufferSink
 struct _GstFramebufferSinkClass
 {
   GstVideoSinkClass videosink_parent_class;
+
+  void (*get_supported_overlay_types) (GstFramebufferSink *framebuffersink, uint8_t *types);
+  gboolean (*prepare_overlay) (GstFramebufferSink *framebuffersink, GstFramebufferSinkOverlayType t,
+     int src_w, int src_h, int dst_x, int dst_y, int dst_w, int dst_h);
+  GstFlowReturn (*show_overlay) (GstFramebufferSink *framebuffersink, guintptr framebuffer_offset);
 };
 
 GType gst_framebuffersink_get_type (void);

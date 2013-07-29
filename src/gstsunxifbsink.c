@@ -112,6 +112,11 @@ static void gst_sunxifbsink_set_property (GObject * object,
 static void gst_sunxifbsink_get_property (GObject * object,
     guint property_id, GValue * value, GParamSpec * pspec);
 
+void gst_sunxifbsink_get_supported_overlay_types (GstFramebufferSink *framebuffersink, uint8_t *types);
+gboolean gst_sunxifbsink_prepare_overlay (GstFramebufferSink *framebuffersink, GstFramebufferSinkOverlayType t,
+     int src_w, int src_h, int dst_x, int dst_y, int dst_w, int dst_h);
+GstFlowReturn gst_sunxifbsink_show_overlay (GstFramebufferSink *framebuffersink, guintptr framebuffer_offset);
+
 enum
 {
   PROP_0,
@@ -148,7 +153,7 @@ gst_sunxifbsink_class_init (GstSunxifbsinkClass* klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstBaseSinkClass *base_sink_class = GST_BASE_SINK_CLASS (klass);
   GstVideoSinkClass *video_sink_class = (GstVideoSinkClass *) klass;
-  GstFramebufferSinkClass *framebuffer_sink_clas = GST_FRAMEBUFFERSINK_CLASS (klass);
+  GstFramebufferSinkClass *framebuffer_sink_class = GST_FRAMEBUFFERSINK_CLASS (klass);
 
 //  gobject_class->set_property = gst_sunxifbsink_set_property;
 //  gobject_class->get_property = gst_sunxifbsink_get_property;
@@ -163,6 +168,10 @@ gst_sunxifbsink_class_init (GstSunxifbsinkClass* klass)
       "Sink/Video",
       "sunxi framebuffer sink",
       "Harm Hanemaaijer <fgenfb@yahoo.com>");
+
+  framebuffer_sink_class->get_supported_overlay_types = GST_DEBUG_FUNCPTR (gst_sunxifbsink_get_supported_overlay_types);
+  framebuffer_sink_class->prepare_overlay = GST_DEBUG_FUNCPTR (gst_sunxifbsink_prepare_overlay);
+  framebuffer_sink_class->show_overlay = GST_DEBUG_FUNCPTR (gst_sunxifbsink_show_overlay);
 }
 
 /* Class member functions. */
@@ -189,6 +198,34 @@ gst_sunxifbsink_get_property (GObject * object, guint property_id,
 
   GST_DEBUG_OBJECT (sunxifbsink, "get_property");
   g_return_if_fail (GST_IS_SUNXIFBSINK (object));
+}
+
+void
+gst_sunxifbsink_get_supported_overlay_types (GstFramebufferSink *framebuffersink, uint8_t *types)
+{
+  types[GST_FRAMEBUFFERSINK_OVERLAY_YUV420] = 1;
+  types[GST_FRAMEBUFFERSINK_OVERLAY_BGRX32] = 1;
+}
+
+gboolean
+gst_sunxifbsink_prepare_overlay (GstFramebufferSink *framebuffersink, GstFramebufferSinkOverlayType t,
+    int src_w, int src_h, int dst_x, int dst_y, int dst_w, int dst_h)
+{
+  GstSunxifbsink *sunxifbsink = GST_SUNXIFBSINK (framebuffersink);
+  GST_SUNXIFBSINK_INFO_OBJECT(sunxifbsink, "prepare_overlay called");
+  return TRUE;
+}
+
+GstFlowReturn
+gst_sunxifbsink_show_overlay (GstFramebufferSink *framebuffersink, guintptr framebuffer_offset)
+{
+  GstSunxifbsink *sunxifbsink = GST_SUNXIFBSINK (framebuffersink);
+
+  char s[80];
+  sprintf(s, "Show overlay called (offset = 0x%08X)", framebuffer_offset);
+  GST_SUNXIFBSINK_INFO_OBJECT(sunxifbsink, s);
+
+  return GST_FLOW_OK;
 }
 
 static gboolean
