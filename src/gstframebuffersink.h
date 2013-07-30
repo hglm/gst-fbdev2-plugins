@@ -27,10 +27,12 @@
 
 G_BEGIN_DECLS
 
-typedef enum { GST_FRAMEBUFFERSINK_OVERLAY_YUV420, GST_FRAMEBUFFERSINK_OVERLAY_BGRX32 }
+typedef enum { GST_FRAMEBUFFERSINK_OVERLAY_TYPE_I420 = 0,
+    GST_FRAMEBUFFERSINK_OVERLAY_TYPE_BGRX32,
+    GST_FRAMEBUFFERSINK_OVERLAY_TYPE_NONE }
     GstFramebufferSinkOverlayType;
-#define GST_FRAMEBUFFERSINK_OVERLAY_TYPE_FIRST GST_FRAMEBUFFERSINK_OVERLAY_YUV420
-#define GST_FRAMEBUFFERSINK_OVERLAY_TYPE_LAST GST_FRAMEBUFFERSINK_OVERLAY_BGRX32
+#define GST_FRAMEBUFFERSINK_OVERLAY_TYPE_FIRST GST_FRAMEBUFFERSINK_OVERLAY_TYPE_I420
+#define GST_FRAMEBUFFERSINK_OVERLAY_TYPE_LAST GST_FRAMEBUFFERSINK_OVERLAY_TYPE_BGRX32
 
 /* Forward declaration. */
 
@@ -61,12 +63,15 @@ struct _GstFramebufferSink
   gboolean clear;
   gint requested_video_width;
   gint requested_video_height;
+  gint width_before_scaling;
+  gint height_before_scaling;
   gint fps;
   gboolean use_buffer_pool;
   gboolean vsync;
   gint flip_buffers;
   gboolean use_graphics_mode;
   gboolean pan_does_vsync;
+  gboolean preserve_par;
 
   /* Invariant device parameters. */
   int fd;
@@ -77,8 +82,10 @@ struct _GstFramebufferSink
   int bytespp;
   uint32_t rmask, gmask, bmask;
   int endianness;
+  GstVideoFormat framebuffer_format;
   int max_framebuffers;
   GQuark framebuffer_address_quark;
+  gboolean open_hardware_success;
   uint8_t hardware_overlay_types_supported[GST_FRAMEBUFFERSINK_OVERLAY_TYPE_LAST -
       GST_FRAMEBUFFERSINK_OVERLAY_TYPE_FIRST + 1];
   /* Variable device parameters. */
@@ -87,6 +94,7 @@ struct _GstFramebufferSink
   int current_framebuffer_index;
   int nu_overlays_used;
   int current_overlay_index;
+  int scaled_width, scaled_height;
   /* Video memory buffer allocation management. */
   gsize allocation_size;
   guintptr allocation_start_offset;
@@ -105,15 +113,21 @@ struct _GstFramebufferSink
   GMutex flow_lock;
   GstBufferPool *pool;
   GstVideoInfo info;
+  gboolean have_caps;
+  GstCaps *caps;
+  gboolean adjusted_dimensions;
+  int adjusted_width;
+  int adjusted_height;
 };
 
 struct _GstFramebufferSinkClass
 {
   GstVideoSinkClass videosink_parent_class;
 
+  gboolean (*open_hardware) (GstFramebufferSink *framebuffersink);
+  void (*close_hardware) (GstFramebufferSink *framebuffersink);
   void (*get_supported_overlay_types) (GstFramebufferSink *framebuffersink, uint8_t *types);
-  gboolean (*prepare_overlay) (GstFramebufferSink *framebuffersink, GstFramebufferSinkOverlayType t,
-     int src_w, int src_h, int dst_x, int dst_y, int dst_w, int dst_h);
+  gboolean (*prepare_overlay) (GstFramebufferSink *framebuffersink, GstFramebufferSinkOverlayType t);
   GstFlowReturn (*show_overlay) (GstFramebufferSink *framebuffersink, guintptr framebuffer_offset);
 };
 
