@@ -155,6 +155,15 @@ GST_STATIC_PAD_TEMPLATE ("sink",
     GST_STATIC_CAPS (GST_FRAMEBUFFERSINK_TEMPLATE_CAPS)
     );
 
+typedef struct {
+  GstVideoFormat format;
+  const char *caps_string;
+} GstFramebufferSinkStaticOverlayFormatData;
+
+static GstFramebufferSinkStaticOverlayFormatData overlay_format_data[2] = {
+  { GST_VIDEO_FORMAT_I420, "I420" },
+  { GST_VIDEO_FORMAT_BGRx, "BGRx" },
+};
 
 /* Class initialization. */
 
@@ -830,19 +839,29 @@ skip_video_size_request:
 static GstCaps *gst_framebuffersink_get_default_caps (GstFramebufferSink *framebuffersink) {
   GstCaps *caps;
   int depth;
+  int i;
+  GstCaps *framebuffer_caps;
 
   if (framebuffersink->framebuffer_format == GST_VIDEO_FORMAT_UNKNOWN)
     goto unknown_format;
 
-  caps = gst_caps_new_simple ("video/x-raw", "format", G_TYPE_STRING,
-    gst_video_format_to_string (framebuffersink->framebuffer_format), NULL);
+  caps = gst_caps_new_empty();
 
-  /* Add any specific overlay formats that are supported. */
-  if (framebuffersink->hardware_overlay_types_supported[GST_FRAMEBUFFERSINK_OVERLAY_TYPE_I420]) {
-    GstCaps *yuv_caps = gst_caps_copy(caps);
-    gst_caps_set_simple(yuv_caps, "format", G_TYPE_STRING, "I420", NULL);
-    gst_caps_append(caps, yuv_caps);
-  }
+  /* First add any specific overlay formats that are supported. */
+  /* They will have precedence over the standard framebuffer format. */
+
+  for (i = GST_FRAMEBUFFERSINK_OVERLAY_TYPE_FIRST; i <= GST_FRAMEBUFFERSINK_OVERLAY_TYPE_LAST;
+      i++)
+    if (framebuffersink->hardware_overlay_types_supported[i] &&
+        overlay_format_data[i].format != framebuffersink->framebuffer_format) {
+      GstCaps *overlay_caps = gst_caps_new_simple("video/x-raw", "format", G_TYPE_STRING,
+          overlay_format_data[i].caps_string, NULL);
+      gst_caps_append(caps, overlay_caps);
+    }
+
+  framebuffer_caps = gst_caps_new_simple ("video/x-raw", "format", G_TYPE_STRING,
+    gst_video_format_to_string (framebuffersink->framebuffer_format), NULL);
+  gst_caps_append(caps, framebuffer_caps);
 
   return caps;
 
@@ -875,7 +894,7 @@ gst_framebuffersink_get_caps (GstBaseSink * sink, GstCaps * filter)
 
   GST_DEBUG_OBJECT (framebuffersink, "get_caps");
 
-#if 0
+#if 1
   if (!framebuffersink->silent)
     g_print ("get_caps: filter caps: %" GST_PTR_FORMAT "\n", filter);
 #endif
@@ -1038,7 +1057,7 @@ done_no_intersect:
 
 done_no_store:
 
-#if 0
+#if 1
   if (!framebuffersink->silent)
     g_print ("get_caps: returned caps: %" GST_PTR_FORMAT "\n", caps);
 #endif
@@ -1089,7 +1108,7 @@ GstVideoInfo *info) {
     offset = framebuffersink->fixinfo.line_length * framebuffersink->varinfo.yres;
 
   if (!gst_framebuffersink_buffer_allocation_table_configure(framebuffersink, info->size, offset)) {
-    GST_ERROR_OBJECT (framebuffersink,
+    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink,
         "Could not reconfigure framebuffer allocation table for new size");
     return FALSE;
   }
@@ -1226,9 +1245,11 @@ gst_framebuffersink_set_caps (GstBaseSink * sink, GstCaps * caps)
     /* When using the hardware scaler, and upstream didn't call get_caps with */
     /* the negotiated caps, update the output dimensions for the scaler. */
     if (matched_overlay_type != GST_FRAMEBUFFERSINK_OVERLAY_TYPE_NONE) {
-      if (framebuffersink->requested_video_width != info.width)
+      if (framebuffersink->requested_video_width != 0 &&
+          framebuffersink->requested_video_width != info.width)
         framebuffersink->scaled_width = framebuffersink->requested_video_width;
-      if (framebuffersink->requested_video_height != info.height)
+      if (framebuffersink->requested_video_height != 0 &&
+          framebuffersink->requested_video_height != info.height)
         framebuffersink->scaled_height = framebuffersink->requested_video_height;
     }
   }
@@ -1247,7 +1268,7 @@ gst_framebuffersink_set_caps (GstBaseSink * sink, GstCaps * caps)
       || framebuffersink->scaled_height != framebuffersink->videosink.height)
       || matched_overlay_type != GST_FRAMEBUFFERSINK_OVERLAY_TYPE_NONE)
       && framebuffersink->use_hardware_overlay) {
-    /* The video dimensions are different from the requested ones, or the video format is YUV. and we */
+    /* The video dimensions are different from the requested ones, or the video format is YUV and we */
     /* are allowed to use the hardware overlay. */
     /* Calculate how may overlays fit in the available video memory (after the visible */
     /* screen. */
@@ -1714,7 +1735,7 @@ gsize size, guintptr start_offset) {
     if (framebuffersink->buffer_allocation_table[i] == 1)
       break;
 
-  if (i == framebuffersink->nu_framebuffers_used)
+  if (i == framebuffersink->buffer_allocation_table_size)
     goto configure;
 
   /* Not empty, so we can't reconfigure it. */

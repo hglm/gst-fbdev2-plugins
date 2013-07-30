@@ -162,7 +162,7 @@ enum
         "; " GST_VIDEO_CAPS_MAKE ("BGRx") \
         "; " GST_VIDEO_CAPS_MAKE ("xRGB") \
         "; " GST_VIDEO_CAPS_MAKE ("xBGR") \
-        "; " GST_VIDEO_CAPS_MAKE ("YUV420") ", " \
+        "; " GST_VIDEO_CAPS_MAKE ("I420") ", " \
         "framerate = (fraction) [ 0, MAX ], " \
         "width = (int) [ 1, MAX ], " "height = (int) [ 1, MAX ]"
 
