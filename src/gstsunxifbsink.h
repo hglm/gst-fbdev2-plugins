@@ -22,6 +22,7 @@
 
 #include <stdint.h>
 #include <linux/fb.h>
+#include "sunxi_disp_ioctl.h"
 #include "gstframebuffersink.h"
 
 G_BEGIN_DECLS
@@ -44,6 +45,15 @@ typedef struct _GstSunxifbsinkClass GstSunxifbsinkClass;
 struct _GstSunxifbsink
 {
   GstFramebufferSink framebuffersink;
+  int fd_disp;
+  int framebuffer_id;
+  int gfx_layer_id;
+  int layer_id;
+  gboolean layer_has_scaler;
+  gboolean layer_is_visible;
+  uint32_t y_offset_in_framebuffer;
+  uint32_t u_offset_in_framebuffer;
+  uint32_t v_offset_in_framebuffer;
 };
 
 struct _GstSunxifbsinkClass
