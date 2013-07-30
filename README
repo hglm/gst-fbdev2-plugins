@@ -9,7 +9,7 @@ devices.
 
 A preliminary plugin called "sunxifbsink" for Allwinner-based devices
 is also provided, also based on libframebuffersink. At the moment it
-does nothing extra except change the name.
+implements an RGB hardware scaling overlay.
 
 This is work-in-progress although the plugin should be quite usable in
 its current form.
@@ -50,6 +50,20 @@ switching consoles helps in this case.
 Run "gst-inspect-1.0 fbdev2sink" for an overview of configurable property
 settings.
 
+*** Usage (sunixfbsink) ***
+
+Hardware overlays are only supported 32bpp at the moment, and only for
+RGB (BGRX).
+
+Example launch line using the hardware scaler:
+
+gst-launch-1.0 videotestsrc horizontal-speed=5 ! sunxifbsink buffer-pool=true \
+fps=60 graphics-mode=false pan-does-vsync=true hardware-overlay=true \
+native-resolution=true >output
+
+This should show a very smooth scrolling test pattern. The 320x240 video
+output of videotestsrc is scaled to the native resolution.
+
 *** Installation ***
 
 On a Debian-based system, GStreamer 1.0 and a number of associated
@@ -66,3 +80,14 @@ plugins to be recognized. Also run sudo ldconfig after installing;
 /usr/local/lib must be in the ldconfig search path.
 
 Run gst-inspect-1.0 fbdev2sink to verify everything is installed correctly.
+
+*** To do ***
+
+- Support hardware scaling from 32bpp source to 16bpp display.
+
+- Support YUV I420 hardware scaling.
+
+- Test on different platforms.
+
+- Support more RGB overlay types than just BGRx with a BGRx framebuffer.
+
