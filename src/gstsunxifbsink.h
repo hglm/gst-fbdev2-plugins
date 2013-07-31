@@ -51,9 +51,7 @@ struct _GstSunxifbsink
   int layer_id;
   gboolean layer_has_scaler;
   gboolean layer_is_visible;
-  uint32_t y_offset_in_framebuffer;
-  uint32_t u_offset_in_framebuffer;
-  uint32_t v_offset_in_framebuffer;
+  GstVideoFormat overlay_format;
 };
 
 struct _GstSunxifbsinkClass

@@ -27,13 +27,6 @@
 
 G_BEGIN_DECLS
 
-typedef enum { GST_FRAMEBUFFERSINK_OVERLAY_TYPE_I420 = 0,
-    GST_FRAMEBUFFERSINK_OVERLAY_TYPE_BGRX32,
-    GST_FRAMEBUFFERSINK_OVERLAY_TYPE_NONE }
-    GstFramebufferSinkOverlayType;
-#define GST_FRAMEBUFFERSINK_OVERLAY_TYPE_FIRST GST_FRAMEBUFFERSINK_OVERLAY_TYPE_I420
-#define GST_FRAMEBUFFERSINK_OVERLAY_TYPE_LAST GST_FRAMEBUFFERSINK_OVERLAY_TYPE_BGRX32
-
 /* Forward declaration. */
 
 typedef struct _GstFramebufferSinkAllocator GstFramebufferSinkAllocator;
@@ -72,12 +65,15 @@ struct _GstFramebufferSink
   gboolean use_graphics_mode;
   gboolean pan_does_vsync;
   gboolean preserve_par;
+  gint max_video_memory_property;
+  gchar *preferred_overlay_format_str;
 
   /* Invariant device parameters. */
   int fd;
   int saved_kd_mode;
   gchar *device;
   uint8_t *framebuffer;
+  guintptr framebuffer_map_size;
   struct fb_fix_screeninfo fixinfo;
   int bytespp;
   uint32_t rmask, gmask, bmask;
@@ -86,8 +82,7 @@ struct _GstFramebufferSink
   int max_framebuffers;
   GQuark framebuffer_address_quark;
   gboolean open_hardware_success;
-  uint8_t hardware_overlay_types_supported[GST_FRAMEBUFFERSINK_OVERLAY_TYPE_LAST -
-      GST_FRAMEBUFFERSINK_OVERLAY_TYPE_FIRST + 1];
+  GstVideoFormat *overlay_formats_supported;
   /* Variable device parameters. */
   struct fb_var_screeninfo varinfo;
   int nu_framebuffers_used;
@@ -126,8 +121,8 @@ struct _GstFramebufferSinkClass
 
   gboolean (*open_hardware) (GstFramebufferSink *framebuffersink);
   void (*close_hardware) (GstFramebufferSink *framebuffersink);
-  void (*get_supported_overlay_types) (GstFramebufferSink *framebuffersink, uint8_t *types);
-  gboolean (*prepare_overlay) (GstFramebufferSink *framebuffersink, GstFramebufferSinkOverlayType t);
+  GstVideoFormat * (*get_supported_overlay_formats) (GstFramebufferSink *framebuffersink);
+  gboolean (*prepare_overlay) (GstFramebufferSink *framebuffersink, GstVideoFormat format);
   GstFlowReturn (*show_overlay) (GstFramebufferSink *framebuffersink, guintptr framebuffer_offset);
 };
 
@@ -147,6 +142,7 @@ struct _GstFramebufferSinkAllocator {
   GstAllocator allocator;
   GstFramebufferSink *framebuffersink;
   int *buffers;
+  int nu_buffers;
 };
 
 struct _GstFramebufferSinkAllocatorClass {

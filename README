@@ -7,9 +7,9 @@ plugin implementation called 'fbdev2sink that doesn't add any features
 over the base class library, suitable for most Linux framebuffer
 devices.
 
-A preliminary plugin called "sunxifbsink" for Allwinner-based devices
-is also provided, also based on libframebuffersink. At the moment it
-implements an RGB hardware scaling overlay.
+A plugin called "sunxifbsink" for Allwinner-based devices is also provided,
+also based on libframebuffersink. At the moment it implements a hardware
+scaling overlay for several YUY formats and BGRx.
 
 This is work-in-progress although the plugin should be quite usable in
 its current form.
@@ -34,7 +34,7 @@ multi-buffered scrolling image. Verify the file "output" to see whether any
 features were disabled and everything is working correctly.
 
 gst-launch-1.0 playbin uri=file:///home/me/videos/video.mp4 \
-video-sink="fbdev2sink buffer-pool=false native-resolution=true \
+video-sink="fbdev2sink buffer-pool=true native-resolution=true \
 graphics-mode=true pan-does-vsync=true" >output
 
 This line runs playbin with fbdev2sink configured with the given parameters.
@@ -52,17 +52,32 @@ settings.
 
 *** Usage (sunixfbsink) ***
 
-Hardware overlays are only supported 32bpp at the moment, and only for
-RGB (BGRX).
-
 Example launch line using the hardware scaler:
 
 gst-launch-1.0 videotestsrc horizontal-speed=5 ! sunxifbsink buffer-pool=true \
-fps=60 graphics-mode=false pan-does-vsync=true hardware-overlay=true \
-native-resolution=true >output
+fps=60 graphics-mode=false pan-does-vsync=true native-resolution=true >output
 
 This should show a very smooth scrolling test pattern. The 320x240 video
 output of videotestsrc is scaled to the native resolution.
+
+gst-launch-1.0 playbin uri=file:///home/me/videos/video.mp4 \
+video-sink="sunxifbsink buffer-pool=true native-resolution=true \
+graphics-mode=true pan-does-vsync=true overlay-format=Y444" >output
+
+This plays a video file using a full-screen hardware overlay in V444 format
+(which is better quality than the default overlay format).
+
+Supported overlay formats:
+
+I420	Planar 4:2:0 YUV (three planes)
+YV12	Planar 4:2:0 YUV (U and V planes swapped)
+NV12	Planar 4:2:0 YUV (U and V planes combined)
+NV21	Planar 4:2:0 YUV (U and V planes combined, U and V swapped)
+YUY2	Packed 4:2:2 YUV
+UYVY	Packed 4:2:2 YUV
+Y444	Planar 4:4:4 YUV
+AYUV	Packed AYUV with alpha channel (A0-Y0-U0-V0 ...)
+BGRx	RGB
 
 *** Installation ***
 
@@ -83,11 +98,9 @@ Run gst-inspect-1.0 fbdev2sink to verify everything is installed correctly.
 
 *** To do ***
 
-- Support hardware scaling from 32bpp source to 16bpp display.
-
-- Support YUV I420 hardware scaling.
-
 - Test on different platforms.
 
 - Support more RGB overlay types than just BGRx with a BGRx framebuffer.
 
+- The plugin is set up to use a single source. Reconfiguring a running
+  pipeline might not work.
