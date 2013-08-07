@@ -38,8 +38,8 @@ typedef struct _GstFramebufferSinkAllocator GstFramebufferSinkAllocator;
 #define GST_FRAMEBUFFERSINK_CLASS(klass)   (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FRAMEBUFFERSINK,GstFramebufferSinkClass))
 #define GST_IS_FRAMEBUFFERSINK(obj)   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FRAMEBUFFERSINK))
 #define GST_IS_FRAMEBUFFERSINK_CLASS(klass)   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FRAMEBUFFERSINK))
-#define GST_FRAMEBUFFERSINK_GET_CLASS(klass) \
-  (G_TYPE_INSTANCE_GET_CLASS ((klass), GST_TYPE_FRAMEBUFFER_SINK, GstFramebufferSinkClass))
+#define GST_FRAMEBUFFERSINK_GET_CLASS(obj) \
+  (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_FRAMEBUFFER_SINK, GstFramebufferSinkClass))
 
 typedef struct _GstFramebufferSink GstFramebufferSink;
 typedef struct _GstFramebufferSinkClass GstFramebufferSinkClass;
@@ -47,11 +47,10 @@ typedef struct _GstFramebufferSinkClass GstFramebufferSinkClass;
 struct _GstFramebufferSink
 {
   GstVideoSink videosink; /* Includes width and height. */
-  GstFramebufferSinkAllocator *allocator;
 
   /* Configurable properties. */
   gboolean silent;
-  gboolean native_resolution;
+  gboolean full_screen;
   gboolean use_hardware_overlay;
   gboolean clear;
   gint requested_video_width;
@@ -80,7 +79,6 @@ struct _GstFramebufferSink
   int endianness;
   GstVideoFormat framebuffer_format;
   int max_framebuffers;
-  GQuark framebuffer_address_quark;
   gboolean open_hardware_success;
   GstVideoFormat *overlay_formats_supported;
   /* Variable device parameters. */
@@ -90,20 +88,34 @@ struct _GstFramebufferSink
   int nu_overlays_used;
   int current_overlay_index;
   int scaled_width, scaled_height;
-  /* Video memory buffer allocation management. */
-  gsize allocation_size;
-  guintptr allocation_start_offset;
-  int buffer_allocation_table_size;
-  uint8_t *buffer_allocation_table;
+  /* Overlay alignment restrictions. */
+  int overlay_alignment;
+  int overlay_scanline_alignment;
+  int overlay_plane_alignment;
+  gboolean overlay_scanline_alignment_is_fixed;
+  /* Video memory allocation management. */
+  GstAllocator *video_memory_allocator;
+  GstAllocationParams *allocation_params;
+  GstMemory **screens;
+  GstMemory **overlays;
 
   /* Video information. */
-  int lines, video_width_in_bytes;
+  int lines;
+  int framebuffer_video_width_in_bytes;
+  /* Video width in bytes for each plane. */
+  int source_video_width_in_bytes[4];
   /* Framerate numerator and denominator */
   gint fps_n;
   gint fps_d;
-
   /* Centering offsets when playing video. */
   int cx, cy;
+  /* Actual overlay organization in video memory for each plane. */
+  int overlay_plane_offset[4];
+  int overlay_scanline_stride[4];
+  int overlay_size;
+  /* Whether the video format provided by GStreamer matches the native */
+  /* alignment requirements. */
+  gboolean overlay_alignment_is_native;
 
   GMutex flow_lock;
   GstBufferPool *pool;
@@ -113,6 +125,12 @@ struct _GstFramebufferSink
   gboolean adjusted_dimensions;
   int adjusted_width;
   int adjusted_height;
+
+  /* Stats. */
+  int stats_video_frames_video_memory;
+  int stats_video_frames_system_memory;
+  int stats_overlay_frames_video_memory;
+  int stats_overlay_frames_system_memory;
 };
 
 struct _GstFramebufferSinkClass
@@ -122,6 +140,9 @@ struct _GstFramebufferSinkClass
   gboolean (*open_hardware) (GstFramebufferSink *framebuffersink);
   void (*close_hardware) (GstFramebufferSink *framebuffersink);
   GstVideoFormat * (*get_supported_overlay_formats) (GstFramebufferSink *framebuffersink);
+  void (*get_alignment_restrictions) (GstFramebufferSink *framebuffersink, GstVideoFormat format,
+      int *overlay_alignment, int *overlay_scanline_alignment, int *overlay_plane_alignment,
+      gboolean *overlay_scanline_alignment_is_fixed);
   gboolean (*prepare_overlay) (GstFramebufferSink *framebuffersink, GstVideoFormat format);
   GstFlowReturn (*show_overlay) (GstFramebufferSink *framebuffersink, guintptr framebuffer_offset);
 };
@@ -134,7 +155,7 @@ GType gst_framebuffersink_get_type (void);
 #define GST_FRAMEBUFFERSINK_ALLOCATOR(obj)   (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FRAMEBUFFERSINK_ALLOCATOR,GstFramebufferSinkAllocator))
 #define GST_FRAMEBUFFERSINK_ALLOCATOR_CLASS(klass)   (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FRAMEBUFFERSINK_ALLOCATOR,GstFramebufferSinkAllocatorClass))
 #define GST_IS_FRAMEBUFFERSINK_ALLOCATOR(obj)   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FRAMEBUFFERSINK_ALLOCATOR))
-#define GST_IS_FRAMEBUFFERSINK_ALLOCATOR_CLASS(obj)   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FRAMEBUFFERSINK_ALLOCATOR))
+#define GST_IS_FRAMEBUFFERSINK_ALLOCATOR_CLASS(klass)   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FRAMEBUFFERSINK_ALLOCATOR))
 
 typedef struct _GstFramebufferSinkAllocatorClass GstFramebufferSinkAllocatorClass;
 

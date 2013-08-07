@@ -19,25 +19,37 @@ the two-pass memcpy implementation of the regular fbdevsink plugin) and
 support for page flipping/vsync, and several configurable properties
 regulating video output and linux framebuffer configuration.
 
+Using video memory buffers has a disadvantage though: reading back from
+the buffers is slow (video memory is uncached is often not designed to be
+read from the CPU). Most movie playing pipelines do want to read back from
+video memory, so in this case not using a buffer pool but simply copying
+each frame from system memory will be faster. Other sources such as
+videotestsrc do not read back from the buffers and are fast.
+
 *** Usage ***
 
 Example launch line:
 
 gst-launch-1.0 videotestsrc horizontal-speed=5 ! fbdev2sink buffer-pool=true \
-native-resolution=true fps=30 >output
+full-screen=true fps=30 >output
 
 This line uses direct streaming into video memory (buffer-pool=true), forces
-the window size to the native full-screen resolution (native-resolution=true),
+the window size to the native full-screen resolution (full-screen=true),
 sets the frames per second to 30, and the text output is directed into the
 file output. If everything is working correctly this should show a tear-free,
 multi-buffered scrolling image. Verify the file "output" to see whether any
 features were disabled and everything is working correctly.
 
 gst-launch-1.0 playbin uri=file:///home/me/videos/video.mp4 \
-video-sink="fbdev2sink buffer-pool=true native-resolution=true \
+video-sink="fbdev2sink buffer-pool=true full-screen=true \
 graphics-mode=true pan-does-vsync=true" >output
 
 This line runs playbin with fbdev2sink configured with the given parameters.
+Because video memory read access is slow, the following might be faster:
+
+gst-launch-1.0 playbin uri=file:///home/me/videos/video.mp4 \
+video-sink="fbdev2sink buffer-pool=false full-screen=true \
+graphics-mode=true pan-does-vsync=true" >output
 
 The property setting graphics-mode=true can be set to force console graphics
 mode (KD_GRAPHICS, reducing interference from the text console and cursor,
@@ -55,14 +67,14 @@ settings.
 Example launch line using the hardware scaler:
 
 gst-launch-1.0 videotestsrc horizontal-speed=5 ! sunxifbsink buffer-pool=true \
-fps=60 graphics-mode=false pan-does-vsync=true native-resolution=true >output
+fps=60 graphics-mode=false pan-does-vsync=true full-screen=true >output
 
 This should show a very smooth scrolling test pattern. The 320x240 video
-output of videotestsrc is scaled to the native resolution.
+output of videotestsrc is scaled to the native full-screen resolution.
 
 gst-launch-1.0 playbin uri=file:///home/me/videos/video.mp4 \
-video-sink="sunxifbsink buffer-pool=true native-resolution=true \
-graphics-mode=true pan-does-vsync=true overlay-format=Y444" >output
+video-sink="sunxifbsink full-screen=true graphics-mode=true pan-does-vsync=true \
+overlay-format=Y444" >output
 
 This plays a video file using a full-screen hardware overlay in V444 format
 (which is better quality than the default overlay format).
@@ -100,7 +112,14 @@ Run gst-inspect-1.0 fbdev2sink to verify everything is installed correctly.
 
 - Test on different platforms.
 
-- Support more RGB overlay types than just BGRx with a BGRx framebuffer.
-
 - The plugin is set up to use a single source. Reconfiguring a running
   pipeline might not work.
+
+- Slow video memory read access impacts performance for movie playback
+  when the buffer pool in video memory is enabled. Maybe autodetect the
+  best strategy.
+
+- Internally, it turns out set_caps and propose_allocation are called twice
+  when using playbin which makes it difficult to allocate the right amount of
+  video memory buffers. This is under investigation.
+

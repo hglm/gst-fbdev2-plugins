@@ -41,12 +41,12 @@
  * Output the video test signal to the framebuffer. The redirect to
  * null surpressed interference from console text mode.
  * |[
- * gst-launch -v videotestsrc ! sunxifbsink native-resolution=true
+ * gst-launch -v videotestsrc ! sunxifbsink full-screen=true
  * ]|
- * Run videotstsrc at native screen resolution
+ * Run videotstsrc at full-screen resolution
  * |[
  * gst-launch -v videotestsrc horizontal_speed=10 ! sunxifbsink \
- * native-resolution=true buffer-pool=true graphics-mode=true
+ * full-screen=true buffer-pool=true graphics-mode=true
  * ]|
  * This command illustrates some of the plugin's optimization features
  * by rendering to video memory with vsync and page flipping in
@@ -54,7 +54,7 @@
  * vsync enabled. You might have to use the fps property to reduce the frame
  * rate on slower systems.
  * |[
- * gst-launch playbin uri=[uri] video-sink="sunxifbsink native-resolution=true"
+ * gst-launch playbin uri=[uri] video-sink="sunxifbsink full-screen=true"
  * ]|
  * Use playbin while passing options to sunxifbsink.
  * </refsect2>
@@ -142,6 +142,9 @@ static void gst_sunxifbsink_get_property (GObject * object,
 static gboolean gst_sunxifbsink_open_hardware (GstFramebufferSink *framebuffersink);
 static void gst_sunxifbsink_close_hardware (GstFramebufferSink *framebuffersink);
 static GstVideoFormat *gst_sunxifbsink_get_supported_overlay_formats (GstFramebufferSink *framebuffersink);
+static void gst_sunxifbsink_get_alignment_restrictions (GstFramebufferSink *framebuffersink,
+    GstVideoFormat format, int *overlay_alignment, int *overlay_scanline_alignment,
+    int *overlay_plane_alignment, gboolean *overlay_scanline_alignment_is_fixed);
 static gboolean gst_sunxifbsink_prepare_overlay (GstFramebufferSink *framebuffersink, GstVideoFormat format);
 static GstFlowReturn gst_sunxifbsink_show_overlay (GstFramebufferSink *framebuffersink, guintptr framebuffer_offset);
 
@@ -225,6 +228,7 @@ gst_sunxifbsink_class_init (GstSunxifbsinkClass* klass)
   framebuffer_sink_class->open_hardware = GST_DEBUG_FUNCPTR (gst_sunxifbsink_open_hardware);
   framebuffer_sink_class->close_hardware = GST_DEBUG_FUNCPTR (gst_sunxifbsink_close_hardware);
   framebuffer_sink_class->get_supported_overlay_formats = GST_DEBUG_FUNCPTR (gst_sunxifbsink_get_supported_overlay_formats);
+  framebuffer_sink_class->get_alignment_restrictions = GST_DEBUG_FUNCPTR (gst_sunxifbsink_get_alignment_restrictions);
   framebuffer_sink_class->prepare_overlay = GST_DEBUG_FUNCPTR (gst_sunxifbsink_prepare_overlay);
   framebuffer_sink_class->show_overlay = GST_DEBUG_FUNCPTR (gst_sunxifbsink_show_overlay);
 }
@@ -312,10 +316,22 @@ gst_sunxifbsink_get_supported_overlay_formats (GstFramebufferSink *framebuffersi
   return sunxifbsink_supported_overlay_formats_table;
 }
 
+static void gst_sunxifbsink_get_alignment_restrictions (GstFramebufferSink *framebuffersink,
+GstVideoFormat format, int *overlay_alignment, int *overlay_scanline_alignment,
+int *overlay_plane_alignment, gboolean *overlay_scanline_alignment_is_fixed)
+{
+  *overlay_alignment = 15;
+  *overlay_scanline_alignment = 15;
+  *overlay_plane_alignment = 15;
+  *overlay_scanline_alignment_is_fixed = TRUE;
+}
+
 #define SIMD_ALIGN(s) (((s) + 15) & ~15)
 
-/* For the prepare overlay and show overlay functions, the output parameters are */
+/* For the prepare overlay and show overlay functions, the parameters are */
 /* stored in the following fields: */
+/* framebuffersink->overlay_plane_offset[i] is the offset in bytes of each plane. */
+/* framebuffersink->overlay_scanline_stride[i] is the scanline stride in bytes of each plane. */
 /* framebuffersink->videosink.width is the source width. */
 /* framebuffersink->videosink.height is the source height. */
 /* framebuffersink->cx is the destination x coordinate. */
@@ -353,23 +369,30 @@ GstVideoFormat format)
     memset(&fb, 0, sizeof (fb));
 
     if (format == GST_VIDEO_FORMAT_Y444) {
+#if 0
       uv_stride = SIMD_ALIGN(framebuffersink->videosink.width);
       y_stride = uv_stride;
       u_offset = y_stride * framebuffersink->videosink.height;
       v_offset = uv_stride * framebuffersink->videosink.height + u_offset;
+#endif
       fb.addr[0] = framebuffersink->fixinfo.smem_start + framebuffer_offset;
-      fb.addr[1] = framebuffersink->fixinfo.smem_start + framebuffer_offset + u_offset;
-      fb.addr[2] = framebuffersink->fixinfo.smem_start + framebuffer_offset + v_offset;
+      fb.addr[1] = framebuffersink->fixinfo.smem_start + framebuffer_offset +
+          framebuffersink->overlay_plane_offset[1];
+      fb.addr[2] = framebuffersink->fixinfo.smem_start + framebuffer_offset +
+          framebuffersink->overlay_plane_offset[2];
       fb.format = DISP_FORMAT_YUV444;
       fb.seq = DISP_SEQ_P3210;
       fb.mode = DISP_MOD_NON_MB_PLANAR;
     }
     else if (format == GST_VIDEO_FORMAT_NV12 || format == GST_VIDEO_FORMAT_NV21) {
+#if 0
       uv_stride = SIMD_ALIGN(framebuffersink->videosink.width);
       y_stride = uv_stride;
       u_offset = y_stride * framebuffersink->videosink.height;
+#endif
       fb.addr[0] = framebuffersink->fixinfo.smem_start + framebuffer_offset;
-      fb.addr[1] = framebuffersink->fixinfo.smem_start + framebuffer_offset + u_offset;
+      fb.addr[1] = framebuffersink->fixinfo.smem_start + framebuffer_offset +
+          framebuffersink->overlay_plane_offset[1];
       fb.format = DISP_FORMAT_YUV420;
       if (format == GST_VIDEO_FORMAT_NV12)
         fb.seq = DISP_SEQ_UVUV;
@@ -378,6 +401,7 @@ GstVideoFormat format)
       fb.mode = DISP_MOD_NON_MB_UV_COMBINED;
     }
     else {
+#if 0
       uv_stride = SIMD_ALIGN(framebuffersink->videosink.width >> 1);
       y_stride = uv_stride * 2;
       if (format == GST_VIDEO_FORMAT_I420) {
@@ -388,9 +412,21 @@ GstVideoFormat format)
         v_offset = y_stride * framebuffersink->videosink.height;
         u_offset = (uv_stride * framebuffersink->videosink.height >> 1) + u_offset;
       }
+#endif
       fb.addr[0] = framebuffersink->fixinfo.smem_start + framebuffer_offset;
-      fb.addr[1] = framebuffersink->fixinfo.smem_start + framebuffer_offset + u_offset;
-      fb.addr[2] = framebuffersink->fixinfo.smem_start + framebuffer_offset + v_offset;
+      if (format == GST_VIDEO_FORMAT_I420) {
+        fb.addr[1] = framebuffersink->fixinfo.smem_start + framebuffer_offset +
+            framebuffersink->overlay_plane_offset[1];
+        fb.addr[2] = framebuffersink->fixinfo.smem_start + framebuffer_offset +
+            framebuffersink->overlay_plane_offset[2];
+      }
+      else {
+        /* GST_VIDEO_FORMAT_YV12 */
+        fb.addr[1] = framebuffersink->fixinfo.smem_start + framebuffer_offset +
+            framebuffersink->overlay_plane_offset[2];
+        fb.addr[2] = framebuffersink->fixinfo.smem_start + framebuffer_offset +
+            framebuffersink->overlay_plane_offset[1];
+      }
       fb.format = DISP_FORMAT_YUV420;
       fb.seq = DISP_SEQ_P3210;
       fb.mode = DISP_MOD_NON_MB_PLANAR;
@@ -443,19 +479,21 @@ GstVideoFormat format)
     memset(&fb, 0, sizeof (fb));
 
     fb.addr[0] = framebuffersink->fixinfo.smem_start + framebuffer_offset;
-    fb.size.width = framebuffersink->videosink.width;
     fb.size.height = framebuffersink->videosink.height;
     if (format == GST_VIDEO_FORMAT_AYUV) {
+//      fb.size.width = framebuffersink->overlay_scanline_stride[0] >> 2;
       fb.format = DISP_FORMAT_YUV444;
       fb.seq = DISP_SEQ_AYUV;
     }
     else {
+//      fb.size.width = framebuffersink->overlay_scanline_stride[0] >> 1;
       fb.format = DISP_FORMAT_YUV422;
       if (format == GST_VIDEO_FORMAT_YUY2)
         fb.seq = DISP_SEQ_YUYV;
       else
         fb.seq = DISP_SEQ_UYVY;
     }
+    fb.size.width = framebuffersink->videosink.width;
     fb.mode = DISP_MOD_INTERLEAVED;
 
     tmp[0] = sunxifbsink->framebuffer_id;
@@ -503,7 +541,7 @@ gst_sunxifbsink_show_overlay_bgrx32 (GstFramebufferSink *framebuffersink, guintp
 
     /* BGRX layer. */
     fb.addr[0] = framebuffersink->fixinfo.smem_start + framebuffer_offset;
-    fb.size.width = framebuffersink->videosink.width;
+    fb.size.width = framebuffersink->overlay_scanline_stride[0] >> 2;
     fb.size.height = framebuffersink->videosink.height;
     fb.format = DISP_FORMAT_ARGB8888;
     fb.seq = DISP_SEQ_ARGB;
@@ -553,6 +591,7 @@ gst_sunxifbsink_show_overlay (GstFramebufferSink *framebuffersink, guintptr fram
 #endif
 
   if (sunxifbsink->overlay_format == GST_VIDEO_FORMAT_I420 ||
+      sunxifbsink->overlay_format == GST_VIDEO_FORMAT_YV12 ||
       sunxifbsink->overlay_format == GST_VIDEO_FORMAT_Y444 ||
       sunxifbsink->overlay_format == GST_VIDEO_FORMAT_NV12 ||
       sunxifbsink->overlay_format == GST_VIDEO_FORMAT_NV21)
