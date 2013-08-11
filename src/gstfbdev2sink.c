@@ -100,9 +100,9 @@ GST_DEBUG_CATEGORY_STATIC (gst_fbdev2sink_debug_category);
 #define GST_CAT_DEFAULT gst_fbdev2sink_debug_category
 
 /* Inline function to produce both normal message and debug info. */
-static inline void GST_FBDEV2SINK_INFO_OBJECT (GstFbdev2sink * fbdev2sink,
+static inline void GST_FBDEV2SINK_INFO_OBJECT (GstFbdev2sink *fbdev2sink,
 const gchar *message) {
-  if (!fbdev2sink->framebuffersink.silent)
+  if (!fbdev2sink->fbdevframebuffersink.framebuffersink.silent)
       g_print ("%s.\n", message);
   GST_INFO_OBJECT (fbdev2sink, message);
 }
@@ -126,17 +126,14 @@ GST_STATIC_PAD_TEMPLATE ("sink",
 
 /* Class initialization. */
 
-#define gst_fbdev2sink_parent_class videosink_parent_class
-G_DEFINE_TYPE_WITH_CODE (GstFbdev2sink, gst_fbdev2sink, GST_TYPE_FRAMEBUFFERSINK,
+#define gst_fbdev2sink_parent_class fbdevframebuffersink_parent_class
+G_DEFINE_TYPE_WITH_CODE (GstFbdev2sink, gst_fbdev2sink, GST_TYPE_FBDEVFRAMEBUFFERSINK,
   GST_DEBUG_CATEGORY_INIT (gst_fbdev2sink_debug_category, "fbdev2sink", 0,
   "debug category for fbdev2sink element"));
 
 static void
 gst_fbdev2sink_class_init (GstFbdev2sinkClass* klass)
 {
-//  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
-//  GstFramebufferSinkClass *framebuffer_sink_class = GST_FRAMEBUFFERSINK_CLASS (klass);
-
   /* Setting up pads and setting metadata should be moved to
      base_class_init if you intend to subclass this class. */
   gst_element_class_add_pad_template (GST_ELEMENT_CLASS(klass),

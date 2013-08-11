@@ -139,7 +139,7 @@ const gchar *message) {
   GST_INFO_OBJECT (drmsink, message);
 }
 
-#define DEFAULT_PROP_DRMDEVICE "/dev/dri/card0"
+#define DEFAULT_DRM_DEVICE "/dev/dri/card0"
 
 /* Class function prototypes. */
 static void gst_drmsink_set_property (GObject * object,
@@ -148,7 +148,7 @@ static void gst_drmsink_get_property (GObject * object,
     guint property_id, GValue * value, GParamSpec * pspec);
 
 static gboolean gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink,
-    GstVideoInfo *info);
+    GstVideoInfo *info, gsize *video_memory_size, gsize *pannable_video_memory_size);
 static void gst_drmsink_close_hardware (GstFramebufferSink *framebuffersink);
 static GstAllocator *gst_drmsink_video_memory_allocator_new (GstFramebufferSink *
     framebuffersink, GstVideoInfo *info, gboolean pannable, gboolean is_overlay);
@@ -167,7 +167,6 @@ enum
 {
   PROP_0,
   PROP_CONNECTOR,
-  PROP_DRMDEVICE,
 };
 
 #define GST_DRMSINK_TEMPLATE_CAPS \
@@ -190,7 +189,7 @@ GST_STATIC_PAD_TEMPLATE ("sink",
 
 /* Class initialization. */
 
-#define gst_drmsink_parent_class videosink_parent_class
+#define gst_drmsink_parent_class framebuffersink_parent_class
 G_DEFINE_TYPE_WITH_CODE (GstDrmsink, gst_drmsink, GST_TYPE_FRAMEBUFFERSINK,
   GST_DEBUG_CATEGORY_INIT (gst_drmsink_debug_category, "drmsink", 0,
   "debug category for drmsink element"));
@@ -219,10 +218,6 @@ gst_drmsink_class_init (GstDrmsinkClass* klass)
       g_param_spec_int ("connector", "Connector", "DRM connector id",
       0, G_MAXINT32, 0, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  g_object_class_install_property (gobject_class, PROP_DRMDEVICE,
-      g_param_spec_string ("drm-device", "DRM device", "DRM device",
-      DEFAULT_PROP_DRMDEVICE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
   framebuffer_sink_class->open_hardware = GST_DEBUG_FUNCPTR (gst_drmsink_open_hardware);
   framebuffer_sink_class->close_hardware = GST_DEBUG_FUNCPTR (gst_drmsink_close_hardware);
   framebuffer_sink_class->wait_for_vsync = GST_DEBUG_FUNCPTR (gst_drmsink_wait_for_vsync);
@@ -235,9 +230,12 @@ gst_drmsink_class_init (GstDrmsinkClass* klass)
 
 static void
 gst_drmsink_init (GstDrmsink *drmsink) {
+  GstFramebufferSink *framebuffersink = GST_FRAMEBUFFERSINK (drmsink);
+
+  /* Override the default value of the device property from GstFramebufferSink. */
+  framebuffersink->device = g_strdup (DEFAULT_DRM_DEVICE);
 
   /* Set the initial values of the properties.*/
-  drmsink->devicefile = g_strdup (DEFAULT_PROP_DRMDEVICE);
   drmsink->preferred_connector_id = - 1;
   drmsink->fd = -1;
   gst_drmsink_reset (drmsink);
@@ -256,9 +254,6 @@ gst_drmsink_set_property (GObject * object, guint prop_id,
     case PROP_CONNECTOR:
       drmsink->preferred_connector_id = g_value_get_int (value);
       break;
-    case PROP_DRMDEVICE:
-      drmsink->devicefile = g_strdup (g_value_get_string (value));
-      break;
     default:
       break;
     }
@@ -276,9 +271,6 @@ gst_drmsink_get_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case PROP_CONNECTOR:
       g_value_set_int (value, drmsink->preferred_connector_id);
-      break;
-    case PROP_DRMDEVICE:
-      g_value_set_string (value, drmsink->devicefile);
       break;
     default:
       break;
@@ -307,12 +299,14 @@ gst_drmsink_find_mode_and_plane (GstDrmsink *drmsink, GstVideoRectangle *dim)
   if (connector->count_modes == 0)
     goto error_no_mode;
 
+#if 0
   g_sprintf(s, "Connected encoder: id = %u", connector->encoder_id);
   GST_DRMSINK_INFO_OBJECT (drmsink, s);
   for (i = 0; i < connector->count_encoders; i++) {
     g_sprintf(s, "Available encoder: id = %u", connector->encoders[i]);
     GST_DRMSINK_INFO_OBJECT (drmsink, s);
   }
+#endif
 
   /* Now get the encoder */
   encoder = drmModeGetEncoder (drmsink->fd, connector->encoder_id);
@@ -327,7 +321,7 @@ gst_drmsink_find_mode_and_plane (GstDrmsink *drmsink, GstVideoRectangle *dim)
   dim->x = dim->y = 0;
   dim->w = mode->hdisplay;
   dim->h = mode->vdisplay;
-  GST_INFO_OBJECT (drmsink, "connector mode = %dx%d", dim->w, dim->h);
+/*   GST_INFO_OBJECT (drmsink, "connector mode = %dx%d", dim->w, dim->h); */
 
   drmsink->crtc_id = encoder->crtc_id;
 
@@ -428,7 +422,9 @@ gst_drmsink_reset (GstDrmsink *drmsink)
 }
 
 static gboolean
-gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *info) {
+gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *info,
+    gsize *video_memory_size, gsize *pannable_video_memory_size)
+{
   GstDrmsink *drmsink = GST_DRMSINK (framebuffersink);
 
   drmModeConnector *connector = NULL;
@@ -444,9 +440,9 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
   }
 
   /* Open drm device. */
-  drmsink->fd = open (drmsink->devicefile, O_RDWR | O_CLOEXEC);
+  drmsink->fd = open (framebuffersink->device, O_RDWR | O_CLOEXEC);
   if (drmsink->fd < 0) {
-    s = g_strdup_printf ("Cannot open DRM device %s", drmsink->devicefile);
+    s = g_strdup_printf ("Cannot open DRM device %s", framebuffersink->device);
     GST_DRMSINK_INFO_OBJECT (drmsink, s);
     g_free (s);
     return FALSE;
@@ -462,15 +458,17 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
   if (drmsink->resources == NULL)
     goto resources_failed;
 
+#if 0
+  /* Print an overview of detected connectors/modes. */
   for (i = 0; i < drmsink->resources->count_connectors; i++) {
     int j;
     connector = drmModeGetConnector(drmsink->fd, drmsink->resources->connectors[i]);
-
     s = g_strdup_printf ("DRM connector found, id = %d, type = %d, connected = %d",
         connector->connector_id, connector->connector_type,
         connector->connection == DRM_MODE_CONNECTED);
     GST_DRMSINK_INFO_OBJECT (drmsink, s);
     g_free (s);
+
     for (j = 0; j < connector->count_modes; j++) {
       s = g_strdup_printf ("Supported mode %s", connector->modes[j].name);
       GST_DRMSINK_INFO_OBJECT (drmsink, s);
@@ -478,6 +476,7 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
     }
     drmModeFreeConnector(connector);
   }
+#endif
 
   if (drmsink->preferred_connector_id >= 0) {
     /* Connector specified as property. */
@@ -554,17 +553,16 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
       drmsink->screen_rect.h);
   size = GST_VIDEO_INFO_COMP_STRIDE (info, 0) * GST_VIDEO_INFO_HEIGHT (info);
 
-  /* GstFramebufferSink expects the max number of allocatable screen buffers to
+  /* GstFramebufferSink expects the amount of usable video memory to be
      be set. Because DRM doesn't really allow querying of available video memory,
-     assume three buffers are available and rely on a specific setting of the
-     video-memory property for more buffers. */
+     assume three screen buffers are available and rely on a specific setting of
+     the video-memory property in order to use more video memory. */
+  *video_memory_size = size * 3 + 1024;
   framebuffersink->max_framebuffers = 3;
-  if (framebuffersink->max_video_memory_property > 0) {
-    framebuffersink->max_framebuffers = (guint64)framebuffersink->max_video_memory_property
-        * 1024 * 1024 / size;
-    if (framebuffersink->max_framebuffers < 1)
-      framebuffersink->max_framebuffers = 1;
-  }
+  if (framebuffersink->max_video_memory_property > 0)
+    *video_memory_size = (guint64)framebuffersink->max_video_memory_property
+        * 1024 * 1024;
+  *pannable_video_memory_size = *video_memory_size;
 
   s = g_strdup_printf("Successfully initialized DRM, connector = %d, mode = %dx%d",
       drmsink->connector_id, drmsink->screen_rect.w, drmsink->screen_rect.h);
@@ -762,8 +760,10 @@ GstAllocationParams *params)
 
   drmsink_video_memory_allocator->total_allocated += size;
 
+#if 0
   g_print ("Allocated video memory buffer of size %zd at %p, align %d, mem = %p\n", size,
       mem->map_address, align, mem);
+#endif
 
   memset (mem->map_address, rand() | 0xFF000000, size);
 

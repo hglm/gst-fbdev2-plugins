@@ -22,7 +22,7 @@
 
 #include <stdint.h>
 #include <linux/fb.h>
-#include "gstframebuffersink.h"
+#include "gstfbdevframebuffersink.h"
 
 G_BEGIN_DECLS
 
@@ -39,12 +39,12 @@ typedef struct _GstFbdev2sinkClass GstFbdev2sinkClass;
 
 struct _GstFbdev2sink
 {
-  GstFramebufferSink framebuffersink;
+  GstFbdevFramebufferSink fbdevframebuffersink;
 };
 
 struct _GstFbdev2sinkClass
 {
-  GstFramebufferSinkClass framebuffersink_parent_class;
+  GstFbdevFramebufferSinkClass fbdevframebuffersink_parent_class;
 };
 
 GType gst_fbdev2sink_get_type (void);

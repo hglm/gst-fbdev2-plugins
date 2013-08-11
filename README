@@ -1,17 +1,29 @@
 *** Overview ***
 
-This repository implements an optimized GStreamer 1.0-based video sink
-for the Linux console framebuffer. It is implemented in a base class
-called GstFramebufferSink in the library libframebuffersink, and a
-plugin implementation called 'fbdev2sink that doesn't add any features
-over the base class library, suitable for most Linux framebuffer
-devices.
+This repository implements a set of optimized GStreamer 1.0-based video
+sink classes for framebuffers and hardware overlays, including the Linux
+console framebuffer. It is implemented in a base class called
+GstFramebufferSink, a derived base class called GstFbdevFramebufferSink
+for fbdev devices. These two classes are available in the library
+libgstframebuffersink. An actual plugin implementation called 'fbdev2sink'
+is implemented that is derived from GstFbdevFramebuffeerSink, suitable for
+most Linux framebuffer devices that use fbdev. A plugin called drmsink for
+the newer DRM kernel interface is also provided.
 
-A plugin called "sunxifbsink" for Allwinner-based devices is also provided,
-also based on libframebuffersink. At the moment it implements a hardware
+Additionally, a plugin called "sunxifbsink" for Allwinner ARM-based devices is
+provided, based on GstFbdevFramebufferSink. At the moment it implements a hardware
 scaling overlay for several YUY formats and BGRx.
 
-This is work-in-progress although the plugin should be quite usable in
+Class schematic:
+
+GstVideoSink -> GstFramebufferSink -> GstFbDevFramebufferSink -> GstFbdev2Sink (plugin)
+                                  \                          \
+                                   -> GstDrmSink (plugin)     -> GstSunxifbSink (plugin)
+
+The GstFramebufferSink class is generic enough that other plugins could be
+implemented, including ones using hardware overlay APIs.
+
+This is work-in-progress although the plugins should be quite usable in
 its current form.
 
 The main features are direct rendering into video memory (instead of
@@ -118,8 +130,4 @@ Run gst-inspect-1.0 fbdev2sink to verify everything is installed correctly.
 - Slow video memory read access impacts performance for movie playback
   when the buffer pool in video memory is enabled. Maybe autodetect the
   best strategy.
-
-- Internally, it turns out set_caps and propose_allocation are called twice
-  when using playbin which makes it difficult to allocate the right amount of
-  video memory buffers. This is under investigation.
 

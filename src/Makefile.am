@@ -15,7 +15,8 @@ plugin_LTLIBRARIES = libgstfbdev2sink.la libgstsunxifbsink.la libgstdrmsink.la
 ##############################################################################
 
 # sources used to compile this library
-libgstframebuffersink_la_SOURCES = gstframebuffersink.c gstframebuffersink.h
+libgstframebuffersink_la_SOURCES = gstframebuffersink.c gstframebuffersink.h \
+    gstfbdevframebuffersink.c gstfbdevframebuffersink.h
 
 # compiler and linker flags used to compile this library, set in configure.ac
 libgstframebuffersink_la_CFLAGS = $(GST_CFLAGS)
@@ -42,13 +43,14 @@ libgstsunxifbsink_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 libgstsunxifbsink_la_LIBTOOLFLAGS = --tag=disable-static
 
 # headers we need but don't want installed
-noinst_HEADERS = gstframebuffersink.h gstfbdev2sink.h gstsunxifbsink.h gstdrmsink.h
+noinst_HEADERS = gstframebuffersink.h gstfbdevframebuffersink.h gstfbdev2sink.h \
+    gstsunxifbsink.h gstdrmsink.h
 
 # sources used to compile this plugin
 libgstdrmsink_la_SOURCES = gstdrmsink.c gstdrmsink.h
 
 # compiler and linker flags used to compile this plugin, set in configure.ac
-libgstdrmsink_la_CFLAGS = $(GST_CFLAGS) `pkg-config --cflags libdrm --cflags libkms --cflags gbm`
-libgstdrmsink_la_LIBADD = $(GST_LIBS) -lgstframebuffersink -ldrm -lkms -lgbm
+libgstdrmsink_la_CFLAGS = $(GST_CFLAGS) `pkg-config --cflags libdrm --cflags libkms`
+libgstdrmsink_la_LIBADD = $(GST_LIBS) -lgstframebuffersink -ldrm -lkms
 libgstdrmsink_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 libgstdrmsink_la_LIBTOOLFLAGS = --tag=disable-static

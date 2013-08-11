@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <linux/fb.h>
 #include "sunxi_disp_ioctl.h"
-#include "gstframebuffersink.h"
+#include "gstfbdevframebuffersink.h"
 
 G_BEGIN_DECLS
 
@@ -44,7 +44,7 @@ typedef struct _GstSunxifbsinkClass GstSunxifbsinkClass;
 
 struct _GstSunxifbsink
 {
-  GstFramebufferSink framebuffersink;
+  GstFbdevFramebufferSink fbdevframebuffersink;
   gboolean hardware_overlay_available;
   int fd_disp;
   int framebuffer_id;
@@ -57,7 +57,7 @@ struct _GstSunxifbsink
 
 struct _GstSunxifbsinkClass
 {
-  GstFramebufferSinkClass framebuffersink_parent_class;
+  GstFbdevFramebufferSinkClass fbdevframebuffersink_parent_class;
 };
 
 GType gst_sunxifbsink_get_type (void);

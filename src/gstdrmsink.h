@@ -59,7 +59,6 @@ struct _GstDrmsink
   GstVideoRectangle screen_rect;
 
   /* Properties */
-  gchar *devicefile;
   gint preferred_connector_id;
 };
 

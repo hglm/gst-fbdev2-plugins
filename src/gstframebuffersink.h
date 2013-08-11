@@ -27,10 +27,6 @@
 
 G_BEGIN_DECLS
 
-/* Forward declaration. */
-
-typedef struct _GstFramebufferSinkAllocator GstFramebufferSinkAllocator;
-
 /* Main class. */
 
 #define GST_TYPE_FRAMEBUFFERSINK   (gst_framebuffersink_get_type())
@@ -50,6 +46,7 @@ struct _GstFramebufferSink
 
   /* Configurable properties. */
   gboolean silent;
+  gchar *device;
   gboolean full_screen;
   gboolean use_hardware_overlay;
   gboolean clear;
@@ -69,15 +66,10 @@ struct _GstFramebufferSink
 
   /* Invariant device parameters. */
   GstVideoInfo screen_info;
-  int fd;
   int saved_kd_mode;
-  gchar *device;
   GstVideoFormat *overlay_formats_supported;
-  /* Extra info used for fbdev devices. */
-  uint8_t *framebuffer;
-  guintptr framebuffer_map_size;
-  struct fb_fix_screeninfo fixinfo;
-  struct fb_var_screeninfo varinfo;
+  gsize video_memory_size;
+  gsize pannable_video_memory_size;
   int max_framebuffers;
   /* Variable device parameters. */
   int current_framebuffer_index;
@@ -94,11 +86,12 @@ struct _GstFramebufferSink
   int nu_screens_used;
   GstMemory **screens;
   GstAllocator *overlay_video_memory_allocator;
-  GstAllocationParams *overlay_allocation_params; // XXX have to set this.
+  GstAllocationParams *overlay_allocation_params;
   int nu_overlays_used;
   GstMemory **overlays;
 
   /* Video information. */
+  GstVideoInfo info;
   int clipped_height;
   int framebuffer_video_width_in_bytes;
   /* Video width in bytes for each plane. */
@@ -118,7 +111,6 @@ struct _GstFramebufferSink
 
   GMutex flow_lock;
   GstBufferPool *pool;
-  GstVideoInfo info;
   gboolean have_caps;
   GstCaps *caps;
   gboolean adjusted_dimensions;
@@ -140,7 +132,8 @@ struct _GstFramebufferSinkClass
    * if required. The function may call gst_framebuffersink_open_hardware_fbdev() for a
    * default fbdev hardware initialization. Should return TRUE on success, and fill in the
    * video info corresponding to the screen framebuffer format. */
-  gboolean (*open_hardware) (GstFramebufferSink *framebuffersink, GstVideoInfo *info);
+  gboolean (*open_hardware) (GstFramebufferSink *framebuffersink, GstVideoInfo *info,
+      gsize *video_memory_size, gsize *pannable_video_memory_size);
   void (*close_hardware) (GstFramebufferSink *framebuffersink);
   void (*pan_display) (GstFramebufferSink *framebuffersink, GstMemory *vmem);
   void (*wait_for_vsync) (GstFramebufferSink *framebuffersink);
@@ -157,10 +150,6 @@ struct _GstFramebufferSinkClass
 GType gst_framebuffersink_get_type (void);
 
 #define GST_MEMORY_FLAG_VIDEO_MEMORY GST_MEMORY_FLAG_LAST
-
-gboolean gst_framebuffersink_open_hardware_fbdev (GstFramebufferSink *framebuffersink,
-   GstVideoInfo *info);
-void gst_framebuffersink_close_hardware_fbdev (GstFramebufferSink *framebuffersink);
 
 G_END_DECLS
 
