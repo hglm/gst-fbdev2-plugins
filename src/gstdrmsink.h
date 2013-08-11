@@ -53,6 +53,7 @@ struct _GstDrmsink
   drmModeCrtc *saved_crtc;
   gboolean crtc_mode_initialized;
   gboolean vblank_occurred;
+  gboolean page_flip_pending;
   gboolean page_flip_occurred;
 
   /* GST */

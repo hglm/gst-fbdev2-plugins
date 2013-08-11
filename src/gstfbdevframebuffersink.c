@@ -525,8 +525,6 @@ gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator, 
 
   GST_DEBUG ("alloc frame %u", size);
 
-  g_print ("video_memory_alloc called\n");
-
   GST_OBJECT_LOCK (video_memory_storage);
 
   if (allocation_params == NULL)
@@ -568,8 +566,6 @@ gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator, 
         return NULL;
       }
   }
-
-  g_printf ("allocating video memory\n");
 
   mem = g_slice_new (GstFbdevFramebufferSinkVideoMemory);
 

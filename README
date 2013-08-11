@@ -39,21 +39,23 @@ often uncached or not optimally configured for read-back). Most movie playing
 pipelines do want to read back from video memory, so in this case not using
 a buffer pool but simply copying each frame from system memory (by not enabling
 the buffer-pool option) will be faster. Other sources such as videotestsrc do
-not read back from the buffers and are fast.
+not read back from the buffers and are fast. The "benchmark" property can
+be set to true on all derived sinks to test video memory read/write speed.
 
-*** Usage ***
+*** Usage (fbdev2sink) ***
 
 Example launch line:
 
-gst-launch-1.0 videotestsrc horizontal-speed=5 ! fbdev2sink buffer-pool=true \
+gst-launch-1.0 videotestsrc horizontal-speed=5 ! queue ! fbdev2sink buffer-pool=true \
 full-screen=true fps=30 >output
 
 This line uses direct streaming into video memory (buffer-pool=true), forces
 the window size to the native full-screen resolution (full-screen=true),
 sets the frames per second to 30, and the text output is directed into the
-file output. If everything is working correctly this should show a tear-free,
-multi-buffered scrolling image. Verify the file "output" to see whether any
-features were disabled and everything is working correctly.
+file output. The queue forces the sink to use a seperate threead. If everything
+is working correctly this should show a tear-free, multi-buffered scrolling image.
+Verify the file "output" to see whether any features were disabled and everything
+is working correctly.
 
 gst-launch-1.0 playbin uri=file:///home/me/videos/video.mp4 \
 video-sink="fbdev2sink buffer-pool=true full-screen=true \
@@ -112,7 +114,7 @@ gst-launch-1.0 playbin uri=file:///home/me/videos/video.mp4 \
 video-sink="sunxifbsink full-screen=true graphics-mode=true pan-does-vsync=true \
 overlay-format=Y444" >output
 
-This plays a video file using a full-screen hardware overlay in V444 format
+This plays a video file using a full-screen hardware overlay in Y444 format
 (which is better quality than the default overlay format).
 
 Supported overlay formats:
@@ -154,3 +156,5 @@ Run gst-inspect-1.0 fbdev2sink to verify everything is installed correctly.
 - Slow video memory read access impacts performance for movie playback
   when the buffer pool in video memory is enabled. Maybe autodetect the
   best strategy.
+
+- Clean up locking and perhaps use a seperate rendering thread.

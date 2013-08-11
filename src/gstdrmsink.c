@@ -162,6 +162,8 @@ static void gst_drmsink_vblank_handler (int fd, unsigned int sequence, unsigned 
     unsigned int tv_usec, void *user_data);
 static void gst_drmsink_page_flip_handler (int fd,  unsigned int sequence,
     unsigned int tv_sec, unsigned int tv_usec, void *user_data);
+static void gst_drmsink_flush_drm_events (GstDrmsink *drmsink);
+static void gst_drmsink_wait_pending_drm_events (GstDrmsink *drmsink);
 
 enum
 {
@@ -540,6 +542,8 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
   drmsink->event_context->version = DRM_EVENT_CONTEXT_VERSION;
   drmsink->event_context->vblank_handler = gst_drmsink_vblank_handler;
   drmsink->event_context->page_flip_handler = gst_drmsink_page_flip_handler;
+  drmsink->page_flip_occurred = FALSE;
+  drmsink->page_flip_pending = FALSE;
 
 #if 0
   drmModeFreeResources(resources);
@@ -594,6 +598,9 @@ static void
 gst_drmsink_close_hardware (GstFramebufferSink *framebuffersink) {
   GstDrmsink *drmsink = GST_DRMSINK (framebuffersink);
 
+  gst_drmsink_flush_drm_events (drmsink);
+  gst_drmsink_wait_pending_drm_events (drmsink);
+
   drmModeSetCrtc (drmsink->fd, drmsink->saved_crtc->crtc_id,
       drmsink->saved_crtc->buffer_id, drmsink->saved_crtc->x,
       drmsink->saved_crtc->y, &drmsink->connector_id, 1,
@@ -605,20 +612,6 @@ gst_drmsink_close_hardware (GstFramebufferSink *framebuffersink) {
   GST_DRMSINK_INFO_OBJECT (drmsink, "Closed DRM device");
 
   return;
-}
-
-static void
-gst_drmsink_vblank_handler (int fd, unsigned int sequence, unsigned int tv_sec,
-    unsigned int tv_usec, void *user_data)
-{
-}
-
-static void
-gst_drmsink_page_flip_handler (int fd,  unsigned int sequence,
-    unsigned int tv_sec, unsigned int tv_usec, void *user_data)
-{
-    GstDrmsink *drmsink = (GstDrmsink *)user_data;
-    drmsink->page_flip_occurred = TRUE;
 }
 
 static gboolean
@@ -864,6 +857,61 @@ GstVideoInfo *info, gboolean pannable, gboolean is_overlay)
   return GST_ALLOCATOR_CAST (drmsink_video_memory_allocator);
 }
 
+/* DRM event related functions. */
+
+static void
+gst_drmsink_vblank_handler (int fd, unsigned int sequence, unsigned int tv_sec,
+    unsigned int tv_usec, void *user_data)
+{
+}
+
+static void
+gst_drmsink_page_flip_handler (int fd,  unsigned int sequence,
+    unsigned int tv_sec, unsigned int tv_usec, void *user_data)
+{
+    GstDrmsink *drmsink = (GstDrmsink *)user_data;
+    drmsink->page_flip_occurred = TRUE;
+    if (drmsink->page_flip_pending)
+     drmsink->page_flip_pending = FALSE;
+}
+
+/* Flush queued drm events. */
+
+static void gst_drmsink_flush_drm_events (GstDrmsink *drmsink) {
+  fd_set fds;
+  struct timeval tv;
+  /* Set the timeout to zero. */
+  memset (&tv, 0, sizeof (tv));
+  FD_ZERO (&fds);
+  while (TRUE) {
+    FD_SET (drmsink->fd, &fds);
+    select (drmsink->fd + 1, &fds, NULL, NULL, &tv);
+    if (FD_ISSET (drmsink->fd, &fds))
+      drmHandleEvent(drmsink->fd, drmsink->event_context);
+    else
+      break;
+  }
+}
+
+/* Wait until all pending page flips have finished. */
+
+static void gst_drmsink_wait_pending_drm_events (GstDrmsink *drmsink) {
+  fd_set fds;
+  struct timeval tv;
+  /* Set the timeout to zero. */
+  memset (&tv, 0, sizeof (tv));
+  FD_ZERO (&fds);
+  while (drmsink->page_flip_pending) {
+    FD_SET (drmsink->fd, &fds);
+    tv.tv_sec = 5;
+    select (drmsink->fd + 1, &fds, NULL, NULL, &tv);
+    if (FD_ISSET (drmsink->fd, &fds))
+      drmHandleEvent(drmsink->fd, drmsink->event_context);
+    else
+      break;
+  }
+}
+
 static void
 gst_drmsink_pan_display (GstFramebufferSink *framebuffersink,
     GstMemory *memory)
@@ -892,12 +940,22 @@ gst_drmsink_pan_display (GstFramebufferSink *framebuffersink,
     drmsink->crtc_mode_initialized = TRUE;
   }
 
+  gst_drmsink_flush_drm_events (drmsink);
+
+  if (drmsink->page_flip_pending) {
+    GST_DRMSINK_INFO_OBJECT (drmsink, "pan_display: previous page flip still pending, skipping");
+    return;
+  }
+
   drmsink->page_flip_occurred = FALSE;
+  drmsink->page_flip_pending = TRUE;
   if (drmModePageFlip (drmsink->fd, drmsink->crtc_id, vmem->fb, DRM_MODE_PAGE_FLIP_EVENT,
       drmsink)) {
     GST_DRMSINK_INFO_OBJECT (drmsink, "drmModePageFlip failed");
     return;
   }
+
+#if 0
   memset (&tv, 0, sizeof (tv));
   FD_ZERO (&fds);
   while (TRUE) {
@@ -910,6 +968,7 @@ gst_drmsink_pan_display (GstFramebufferSink *framebuffersink,
           break;
     }
   }
+#endif
 }
 
 static void

@@ -158,6 +158,7 @@ enum
   PROP_USE_HARDWARE_OVERLAY,
   PROP_MAX_VIDEO_MEMORY_USED,
   PROP_OVERLAY_FORMAT,
+  PROP_BENCHMARK,
 };
 
 /* pad templates */
@@ -306,6 +307,10 @@ gst_framebuffersink_class_init (GstFramebufferSinkClass* klass)
           "Set the preferred overlay format (four character code); by default the standard rank order "
           "provided by the plugin will be applied", NULL,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class, PROP_BENCHMARK,
+    g_param_spec_boolean ("benchmark", "Benchmark video memory",
+                          "Perform video memory benchmarks at start-up",
+                          FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   base_sink_class->start = GST_DEBUG_FUNCPTR (gst_framebuffersink_start);
   base_sink_class->stop = GST_DEBUG_FUNCPTR (gst_framebuffersink_stop);
@@ -359,6 +364,8 @@ gst_framebuffersink_init (GstFramebufferSink *framebuffersink) {
   framebuffersink->preserve_par = TRUE;
   framebuffersink->max_video_memory_property = 0;
   framebuffersink->preferred_overlay_format_str = NULL;
+  framebuffersink->benchmark = FALSE;
+
   gst_video_info_init (&framebuffersink->info);
 }
 
@@ -499,6 +506,9 @@ gst_framebuffersink_set_property (GObject * object, guint property_id,
         g_free (framebuffersink->preferred_overlay_format_str);
       framebuffersink->preferred_overlay_format_str = g_value_dup_string (value);
       break;
+    case PROP_BENCHMARK:
+      framebuffersink->benchmark = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -580,6 +590,9 @@ gst_framebuffersink_get_property (GObject * object, guint property_id,
       break;
     case PROP_OVERLAY_FORMAT:
       g_value_set_string (value, framebuffersink->preferred_overlay_format_str);
+      break;
+    case PROP_BENCHMARK:
+      g_value_set_boolean (value, framebuffersink->benchmark);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -669,6 +682,279 @@ gst_framebuffersink_put_image_pan(GstFramebufferSink * framebuffersink, GstMemor
   klass->pan_display(framebuffersink, memory);
 }
 
+/* Benchmark functionality. */
+
+static void clear_words (uint32_t *dest, gsize size) {
+  while (size >= 32) {
+    *dest = 0;
+    *(dest + 1) = 0;
+    *(dest + 2) = 0;
+    *(dest + 3) = 0;
+    *(dest + 4) = 0;
+    *(dest + 5) = 0;
+    size -= 32;
+    *(dest + 6) = 0;
+    *(dest + 7) = 0;
+    dest += 8;
+  }
+  while (size >= 4) {
+    *dest = 0;
+    size -= 4;
+    dest++;
+  }
+}
+
+static void gst_framebuffersink_benchmark_clear_first_memset (GstFramebufferSink *framebuffersink,
+    GstMemory **buffers, int nu_buffers, GstMemory *source_buffer)
+{
+  GstMapInfo mapinfo;
+  gst_memory_map (buffers[0], &mapinfo, GST_MAP_WRITE);
+  memset (mapinfo.data, 0, mapinfo.size);
+  gst_memory_unmap (buffers[0], &mapinfo);
+}
+
+static void gst_framebuffersink_benchmark_clear_first_words (GstFramebufferSink *framebuffersink,
+    GstMemory **buffers, int nu_buffers, GstMemory *source_buffer)
+{
+  GstMapInfo mapinfo;
+  uint32_t *dest;
+  int size  = GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info);
+  gst_memory_map (buffers[0], &mapinfo, GST_MAP_WRITE);
+  dest = (uint32_t *)mapinfo.data;
+  clear_words (dest, size);
+  gst_memory_unmap (buffers[0], &mapinfo);
+}
+
+/* Test write combining. */
+
+static void gst_framebuffersink_benchmark_clear_first_bytes (GstFramebufferSink *framebuffersink,
+    GstMemory **buffers, int nu_buffers, GstMemory *source_buffer)
+{
+  GstMapInfo mapinfo;
+  uint8_t *dest;
+  int size  = GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info);
+  gst_memory_map (buffers[0], &mapinfo, GST_MAP_WRITE);
+  dest = mapinfo.data;
+  while (size >= 16) {
+    *dest = 0;
+    *(dest + 1) = 0;
+    *(dest + 2) = 0;
+    *(dest + 3) = 0;
+    *(dest + 4) = 0;
+    *(dest + 5) = 0;
+    *(dest + 6) = 0;
+    *(dest + 7) = 0;
+    *(dest + 8) = 0;
+    *(dest + 9) = 0;
+    *(dest + 10) = 0;
+    *(dest + 11) = 0;
+    *(dest + 12) = 0;
+    *(dest + 13) = 0;
+    size -= 16;
+    *(dest + 14) = 0;
+    *(dest + 15) = 0;
+    dest += 16;
+  }
+  while (size > 0) {
+    *dest = 0;
+    size--;
+    dest++;
+  }
+  gst_memory_unmap (buffers[0], &mapinfo);
+}
+
+/* Test read access. */
+
+static void gst_framebuffersink_benchmark_read_first_words (GstFramebufferSink *framebuffersink,
+    GstMemory **buffers, int nu_buffers, GstMemory *source_buffer)
+{
+  GstMapInfo mapinfo;
+  uint32_t *src;
+  uint32_t sum = 0;
+  int size  = GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info);
+  gst_memory_map (buffers[0], &mapinfo, GST_MAP_READ);
+  src = (uint32_t *)mapinfo.data;
+  while (size >= 32) {
+    sum += *src;
+    sum += *(src + 1);
+    sum += *(src + 2);
+    sum += *(src + 3);
+    sum += *(src + 4);
+    sum += *(src + 5);
+    sum += *(src + 6);
+    size -= 32;
+    sum += *(src + 7);
+    src += 8;
+  }
+  while (size >= 4) {
+    sum += *src;
+    size -= 4;
+    src++;
+  }
+  *(uint32_t *)mapinfo.data = sum;
+  gst_memory_unmap (buffers[0], &mapinfo);
+}
+
+static void gst_framebuffersink_benchmark_clear_all_words (GstFramebufferSink *framebuffersink,
+    GstMemory **buffers, int nu_buffers, GstMemory *source_buffer)
+{
+  GstMapInfo mapinfo;
+  uint32_t *dest;
+  int size  = GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info);
+  int i;
+  for (i = 0; i < nu_buffers; i++) {
+    gst_memory_map (buffers[i], &mapinfo, GST_MAP_WRITE);
+    dest = (uint32_t *)mapinfo.data;
+    clear_words (dest, size);
+    gst_memory_unmap (buffers[i], &mapinfo);
+  }
+}
+
+static void gst_framebuffersink_benchmark_copy_first_memcpy (GstFramebufferSink *framebuffersink,
+    GstMemory **buffers, int nu_buffers, GstMemory *source_buffer)
+{
+  GstMapInfo mapinfo;
+  GstMapInfo mapinfo_src;
+  int size  = GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info);
+  gst_memory_map (buffers[0], &mapinfo, GST_MAP_WRITE);
+  gst_memory_map (source_buffer, &mapinfo_src, GST_MAP_READ);
+  memcpy (mapinfo.data, mapinfo_src.data, size);
+  gst_memory_unmap (source_buffer, &mapinfo_src);
+  gst_memory_unmap (buffers[0], &mapinfo);
+}
+
+/* Copy multiple system memory buffers to a single destination buffer.
+   The source buffer reverses roles as destination buffer. */
+
+static void gst_framebuffersink_benchmark_copy_n_to_source_memcpy (GstFramebufferSink *framebuffersink,
+    GstMemory **buffers, int nu_buffers, GstMemory *source_buffer)
+{
+  GstMapInfo mapinfo;
+  GstMapInfo mapinfo_src;
+  int i;
+  int size  = GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info);
+  for (i = 0; i < nu_buffers; i++) {
+    gst_memory_map (buffers[0], &mapinfo, GST_MAP_READ);
+    gst_memory_map (source_buffer, &mapinfo_src, GST_MAP_WRITE);
+    memcpy (mapinfo_src.data, mapinfo.data, size);
+    gst_memory_unmap (source_buffer, &mapinfo_src);
+    gst_memory_unmap (buffers[0], &mapinfo);
+  }
+}
+
+static void
+gst_framebuffersink_benchmark_operation (GstFramebufferSink *framebuffersink, GstMemory **buffers,
+    int nu_buffers, GstMemory *source_buffer, const gchar *benchmark_name,
+    void (*benchmark_operation) (GstFramebufferSink *framebuffersink, GstMemory **buffers,
+    int nu_buffers, GstMemory *source_buffer), gsize bytes)
+{
+  struct timeval tv_start, tv_end, tv_elapsed;
+  int n = 0;
+  double elapsed_secs;
+
+  benchmark_operation (framebuffersink, buffers, nu_buffers, source_buffer);
+
+  gettimeofday (&tv_start, NULL);
+
+  for (;;) {
+    int i;
+    for (i = 0; i < 4; i++)
+      benchmark_operation (framebuffersink, buffers, nu_buffers, source_buffer);
+    n += 4;
+
+    gettimeofday (&tv_end, NULL);
+    timersub (&tv_end, &tv_start, &tv_elapsed);
+    if (tv_elapsed.tv_sec >= 1)
+      break;
+  }
+
+  elapsed_secs = (double)tv_elapsed.tv_sec + (double)tv_elapsed.tv_usec / 1000000;
+  g_print ("Benchmark: %-32s %7.2lf MB/s  %6.1lf fps\n", benchmark_name,
+      bytes * n / (elapsed_secs * 1024 * 1024), bytes * n / (elapsed_secs *
+      GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info)));
+}
+
+static void
+gst_framebuffersink_benchmark (GstFramebufferSink *framebuffersink)
+{
+  GstMemory **buffers;
+  GstMemory *system_buffers[8];
+  GstMemory *source_buffer;
+  GstAllocator *default_allocator;
+  int i;
+  int n = framebuffersink->max_framebuffers;
+  buffers = g_slice_alloc (sizeof(GstMemory *) * framebuffersink->max_framebuffers);
+  for (i = 0; i < framebuffersink->max_framebuffers; i++) {
+      buffers[i] = gst_allocator_alloc (
+          framebuffersink->screen_video_memory_allocator, GST_VIDEO_INFO_SIZE (
+          &framebuffersink->screen_info), NULL);
+      if (buffers[i] == NULL) {
+        n = i;
+        break;
+      }
+  }
+  if (n == 0) {
+    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "Could not allocate buffers for benchmark");
+    goto no_buffers;
+  }
+
+  default_allocator = gst_allocator_find (NULL);
+  source_buffer = gst_allocator_alloc (default_allocator, GST_VIDEO_INFO_SIZE (
+         &framebuffersink->screen_info), NULL);
+
+  /* Perform a read operation and write operation to warm up. */
+  gst_framebuffersink_benchmark_read_first_words (framebuffersink, buffers, n, source_buffer);
+  gst_framebuffersink_benchmark_clear_first_words (framebuffersink, buffers, n, source_buffer);
+
+  gst_framebuffersink_benchmark_operation (framebuffersink, buffers, n, source_buffer,
+      "Clear first buffer (memset)", gst_framebuffersink_benchmark_clear_first_memset,
+      GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info));
+  gst_framebuffersink_benchmark_operation (framebuffersink, buffers, n, source_buffer,
+      "Clear first buffer (words)", gst_framebuffersink_benchmark_clear_first_words,
+      GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info));
+  gst_framebuffersink_benchmark_operation (framebuffersink, buffers, n, source_buffer,
+      "Clear first buffer (bytes)", gst_framebuffersink_benchmark_clear_first_bytes,
+      GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info));
+  gst_framebuffersink_benchmark_operation (framebuffersink, buffers, n, source_buffer,
+      "Read first buffer (words)", gst_framebuffersink_benchmark_read_first_words,
+      GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info));
+  gst_framebuffersink_benchmark_operation (framebuffersink, buffers, n, source_buffer,
+      "Clear all buffers (words)", gst_framebuffersink_benchmark_clear_all_words,
+      GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info) * n);
+  gst_framebuffersink_benchmark_operation (framebuffersink, buffers, n, source_buffer,
+      "Copy system to video (memcpy)", gst_framebuffersink_benchmark_copy_first_memcpy,
+      GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info));
+
+  for (i = 0; i < 8; i++)
+     system_buffers[i] = gst_allocator_alloc (default_allocator, GST_VIDEO_INFO_SIZE (
+         &framebuffersink->screen_info), NULL);
+
+  gst_framebuffersink_benchmark_operation (framebuffersink, system_buffers, 8, source_buffer,
+      "Clear system memory (words)", gst_framebuffersink_benchmark_clear_first_words,
+      GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info));
+  gst_framebuffersink_benchmark_operation (framebuffersink, system_buffers, 8, source_buffer,
+      "Read system memory (words)", gst_framebuffersink_benchmark_read_first_words,
+      GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info));
+  gst_framebuffersink_benchmark_operation (framebuffersink, system_buffers, 8, source_buffer,
+      "Clear 8 system buffers (words)", gst_framebuffersink_benchmark_clear_all_words,
+      GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info) * 8);
+  gst_framebuffersink_benchmark_operation (framebuffersink, system_buffers, 8, source_buffer,
+      "Copy 8 system to system (memcpy)", gst_framebuffersink_benchmark_copy_n_to_source_memcpy,
+      GST_VIDEO_INFO_SIZE (&framebuffersink->screen_info) * 8);
+
+  for (i = 0; i < 8; i++)
+     gst_allocator_free (default_allocator, system_buffers[i]);
+
+  gst_allocator_free (default_allocator, source_buffer);
+
+  for (i = 0; i < n; i++)
+      gst_allocator_free (framebuffersink->screen_video_memory_allocator,
+          buffers[i]);
+
+no_buffers:
+  g_slice_free1 (sizeof(GstMemory *) * framebuffersink->max_framebuffers, buffers);
+}
+
 /* Start function, called when resources should be allocated. */
 
 static gboolean
@@ -728,6 +1014,10 @@ continue_initialization:
   /* Get a screen allocator. */
   framebuffersink->screen_video_memory_allocator = klass->video_memory_allocator_new (
       framebuffersink, &framebuffersink->screen_info, TRUE, FALSE);
+
+  /* Perform benchmarks if requested. */
+  if (framebuffersink->benchmark)
+    gst_framebuffersink_benchmark (framebuffersink);
 
   /* Reset overlay types. */
   framebuffersink->overlay_formats_supported = gst_framebuffersink_get_supported_overlay_formats (framebuffersink);

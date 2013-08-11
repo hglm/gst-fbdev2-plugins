@@ -63,6 +63,7 @@ struct _GstFramebufferSink
   gboolean preserve_par;
   gint max_video_memory_property;
   gchar *preferred_overlay_format_str;
+  gboolean benchmark;
 
   /* Invariant device parameters. */
   GstVideoInfo screen_info;
