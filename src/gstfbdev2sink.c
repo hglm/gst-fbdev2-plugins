@@ -150,6 +150,10 @@ gst_fbdev2sink_class_init (GstFbdev2sinkClass* klass)
 
 static void
 gst_fbdev2sink_init (GstFbdev2sink *fbdev2sink) {
+  GstFramebufferSink *framebuffersink = GST_FRAMEBUFFERSINK (fbdev2sink);
+
+  /* Override the default value of the hardware-overlay property from GstFramebufferSink. */
+  framebuffersink->use_hardware_overlay = FALSE;
 }
 
 static gboolean

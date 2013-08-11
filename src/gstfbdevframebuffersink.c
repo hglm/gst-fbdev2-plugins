@@ -21,7 +21,7 @@
  *
  * The GstFbdevFramebufferSink class implements an optimized video sink
  * for the Linux console framebuffer, derived from GstFramebufferSink.
- * t is used as the basis for the fbdev2sink plugin. It can write directly
+ * It is used as the basis for the fbdev2sink plugin. It can write directly
  * into video memory with page flipping support, and should be usable by
  * a wide variety of devices. The class can be derived for device-specific
  * implementations with hardware acceleration.
@@ -670,9 +670,14 @@ GstVideoInfo *info, gboolean pannable, gboolean is_overlay)
   GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
   GstFbdevFramebufferSinkVideoMemoryAllocator *fbdevframebuffersink_video_memory_allocator =
       g_object_new (gst_fbdevframebuffersink_video_memory_allocator_get_type (), NULL);
+  char s[80];
 
   gst_fbdevframebuffersink_allocation_params_init (fbdevframebuffersink,
       &fbdevframebuffersink_video_memory_allocator->params, pannable, is_overlay);
+
+  g_sprintf (s, "fbdevframebuffersink_video_memory_%p", fbdevframebuffersink_video_memory_allocator);
+  gst_allocator_register (s, gst_object_ref (fbdevframebuffersink_video_memory_allocator) );
+
   return GST_ALLOCATOR_CAST (fbdevframebuffersink_video_memory_allocator);
 }
 
