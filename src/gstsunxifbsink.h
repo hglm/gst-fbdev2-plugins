@@ -45,6 +45,7 @@ typedef struct _GstSunxifbsinkClass GstSunxifbsinkClass;
 struct _GstSunxifbsink
 {
   GstFramebufferSink framebuffersink;
+  gboolean hardware_overlay_available;
   int fd_disp;
   int framebuffer_id;
   int gfx_layer_id;

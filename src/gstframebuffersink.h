@@ -68,24 +68,19 @@ struct _GstFramebufferSink
   gchar *preferred_overlay_format_str;
 
   /* Invariant device parameters. */
+  GstVideoInfo screen_info;
   int fd;
   int saved_kd_mode;
   gchar *device;
+  GstVideoFormat *overlay_formats_supported;
+  /* Extra info used for fbdev devices. */
   uint8_t *framebuffer;
   guintptr framebuffer_map_size;
   struct fb_fix_screeninfo fixinfo;
-  int bytespp;
-  uint32_t rmask, gmask, bmask;
-  int endianness;
-  GstVideoFormat framebuffer_format;
-  int max_framebuffers;
-  gboolean open_hardware_success;
-  GstVideoFormat *overlay_formats_supported;
-  /* Variable device parameters. */
   struct fb_var_screeninfo varinfo;
-  int nu_framebuffers_used;
+  int max_framebuffers;
+  /* Variable device parameters. */
   int current_framebuffer_index;
-  int nu_overlays_used;
   int current_overlay_index;
   int scaled_width, scaled_height;
   /* Overlay alignment restrictions. */
@@ -94,13 +89,17 @@ struct _GstFramebufferSink
   int overlay_plane_alignment;
   gboolean overlay_scanline_alignment_is_fixed;
   /* Video memory allocation management. */
-  GstAllocator *video_memory_allocator;
-  GstAllocationParams *allocation_params;
+  GstAllocator *screen_video_memory_allocator;
+  GstAllocationParams *screen_allocation_params;
+  int nu_screens_used;
   GstMemory **screens;
+  GstAllocator *overlay_video_memory_allocator;
+  GstAllocationParams *overlay_allocation_params; // XXX have to set this.
+  int nu_overlays_used;
   GstMemory **overlays;
 
   /* Video information. */
-  int lines;
+  int clipped_height;
   int framebuffer_video_width_in_bytes;
   /* Video width in bytes for each plane. */
   int source_video_width_in_bytes[4];
@@ -137,40 +136,31 @@ struct _GstFramebufferSinkClass
 {
   GstVideoSinkClass videosink_parent_class;
 
-  gboolean (*open_hardware) (GstFramebufferSink *framebuffersink);
+  /* The open_hardware function should open the device and perform other initializations
+   * if required. The function may call gst_framebuffersink_open_hardware_fbdev() for a
+   * default fbdev hardware initialization. Should return TRUE on success, and fill in the
+   * video info corresponding to the screen framebuffer format. */
+  gboolean (*open_hardware) (GstFramebufferSink *framebuffersink, GstVideoInfo *info);
   void (*close_hardware) (GstFramebufferSink *framebuffersink);
+  void (*pan_display) (GstFramebufferSink *framebuffersink, GstMemory *vmem);
+  void (*wait_for_vsync) (GstFramebufferSink *framebuffersink);
   GstVideoFormat * (*get_supported_overlay_formats) (GstFramebufferSink *framebuffersink);
-  void (*get_alignment_restrictions) (GstFramebufferSink *framebuffersink, GstVideoFormat format,
+  void (*get_overlay_alignment_restrictions) (GstFramebufferSink *framebuffersink, GstVideoFormat format,
       int *overlay_alignment, int *overlay_scanline_alignment, int *overlay_plane_alignment,
       gboolean *overlay_scanline_alignment_is_fixed);
   gboolean (*prepare_overlay) (GstFramebufferSink *framebuffersink, GstVideoFormat format);
-  GstFlowReturn (*show_overlay) (GstFramebufferSink *framebuffersink, guintptr framebuffer_offset);
+  GstFlowReturn (*show_overlay) (GstFramebufferSink *framebuffersink, GstMemory *memory);
+  GstAllocator * (*video_memory_allocator_new) (GstFramebufferSink *framebuffersink,
+      GstVideoInfo *info, gboolean pannable, gboolean is_overlay);
 };
 
 GType gst_framebuffersink_get_type (void);
 
-/* Allocator class. */
+#define GST_MEMORY_FLAG_VIDEO_MEMORY GST_MEMORY_FLAG_LAST
 
-#define GST_TYPE_FRAMEBUFFERSINK_ALLOCATOR   (gst_framebuffersink_allocator_get_type())
-#define GST_FRAMEBUFFERSINK_ALLOCATOR(obj)   (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FRAMEBUFFERSINK_ALLOCATOR,GstFramebufferSinkAllocator))
-#define GST_FRAMEBUFFERSINK_ALLOCATOR_CLASS(klass)   (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FRAMEBUFFERSINK_ALLOCATOR,GstFramebufferSinkAllocatorClass))
-#define GST_IS_FRAMEBUFFERSINK_ALLOCATOR(obj)   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FRAMEBUFFERSINK_ALLOCATOR))
-#define GST_IS_FRAMEBUFFERSINK_ALLOCATOR_CLASS(klass)   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FRAMEBUFFERSINK_ALLOCATOR))
-
-typedef struct _GstFramebufferSinkAllocatorClass GstFramebufferSinkAllocatorClass;
-
-struct _GstFramebufferSinkAllocator {
-  GstAllocator allocator;
-  GstFramebufferSink *framebuffersink;
-  int *buffers;
-  int nu_buffers;
-};
-
-struct _GstFramebufferSinkAllocatorClass {
-  GstAllocatorClass allocator_parent_class;
-};
-
-GType gst_framebuffersink_allocator_get_type (void);
+gboolean gst_framebuffersink_open_hardware_fbdev (GstFramebufferSink *framebuffersink,
+   GstVideoInfo *info);
+void gst_framebuffersink_close_hardware_fbdev (GstFramebufferSink *framebuffersink);
 
 G_END_DECLS
 

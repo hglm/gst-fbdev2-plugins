@@ -4,7 +4,7 @@
 # TODO: change libgstplugin.la to something else, e.g. libmysomething.la     #
 ##############################################################################
 lib_LTLIBRARIES = libgstframebuffersink.la
-plugin_LTLIBRARIES = libgstfbdev2sink.la libgstsunxifbsink.la
+plugin_LTLIBRARIES = libgstfbdev2sink.la libgstsunxifbsink.la libgstdrmsink.la
 
 ##############################################################################
 # TODO: for the next set of variables, name the prefix if you named the .la, #
@@ -42,4 +42,13 @@ libgstsunxifbsink_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 libgstsunxifbsink_la_LIBTOOLFLAGS = --tag=disable-static
 
 # headers we need but don't want installed
-noinst_HEADERS = gstframebuffersink.h gstfbdev2sink.h gstsunxifbsink.h
+noinst_HEADERS = gstframebuffersink.h gstfbdev2sink.h gstsunxifbsink.h gstdrmsink.h
+
+# sources used to compile this plugin
+libgstdrmsink_la_SOURCES = gstdrmsink.c gstdrmsink.h
+
+# compiler and linker flags used to compile this plugin, set in configure.ac
+libgstdrmsink_la_CFLAGS = $(GST_CFLAGS) `pkg-config --cflags libdrm --cflags libkms --cflags gbm`
+libgstdrmsink_la_LIBADD = $(GST_LIBS) -lgstframebuffersink -ldrm -lkms -lgbm
+libgstdrmsink_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+libgstdrmsink_la_LIBTOOLFLAGS = --tag=disable-static

@@ -102,20 +102,10 @@ GST_DEBUG_CATEGORY_STATIC (gst_fbdev2sink_debug_category);
 /* Inline function to produce both normal message and debug info. */
 static inline void GST_FBDEV2SINK_INFO_OBJECT (GstFbdev2sink * fbdev2sink,
 const gchar *message) {
-  if (!fbdev2sink->framebuffersink.silent) g_print (message); g_print(".\n");
+  if (!fbdev2sink->framebuffersink.silent)
+      g_print ("%s.\n", message);
   GST_INFO_OBJECT (fbdev2sink, message);
 }
-
-/* Class function prototypes. */
-static void gst_fbdev2sink_set_property (GObject * object,
-    guint property_id, const GValue * value, GParamSpec * pspec);
-static void gst_fbdev2sink_get_property (GObject * object,
-    guint property_id, GValue * value, GParamSpec * pspec);
-
-enum
-{
-  PROP_0,
-};
 
 #define GST_FBDEV2SINK_TEMPLATE_CAPS \
         GST_VIDEO_CAPS_MAKE ("RGB") \
@@ -126,7 +116,6 @@ enum
         "; " GST_VIDEO_CAPS_MAKE ("xBGR") ", " \
         "framerate = (fraction) [ 0, MAX ], " \
         "width = (int) [ 1, MAX ], " "height = (int) [ 1, MAX ]"
-
 
 static GstStaticPadTemplate gst_fbdev2sink_sink_template =
 GST_STATIC_PAD_TEMPLATE ("sink",
@@ -145,13 +134,8 @@ G_DEFINE_TYPE_WITH_CODE (GstFbdev2sink, gst_fbdev2sink, GST_TYPE_FRAMEBUFFERSINK
 static void
 gst_fbdev2sink_class_init (GstFbdev2sinkClass* klass)
 {
-  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
-  GstBaseSinkClass *base_sink_class = GST_BASE_SINK_CLASS (klass);
-  GstVideoSinkClass *video_sink_class = (GstVideoSinkClass *) klass;
-  GstFramebufferSinkClass *framebuffer_sink_clas = GST_FRAMEBUFFERSINK_CLASS (klass);
-
-//  gobject_class->set_property = gst_fbdev2sink_set_property;
-//  gobject_class->get_property = gst_fbdev2sink_get_property;
+//  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+//  GstFramebufferSinkClass *framebuffer_sink_class = GST_FRAMEBUFFERSINK_CLASS (klass);
 
   /* Setting up pads and setting metadata should be moved to
      base_class_init if you intend to subclass this class. */
@@ -169,26 +153,6 @@ gst_fbdev2sink_class_init (GstFbdev2sinkClass* klass)
 
 static void
 gst_fbdev2sink_init (GstFbdev2sink *fbdev2sink) {
-}
-
-void
-gst_fbdev2sink_set_property (GObject * object, guint property_id,
-    const GValue * value, GParamSpec * pspec)
-{
-  GstFbdev2sink *fbdev2sink = GST_FBDEV2SINK (object);
-
-  GST_DEBUG_OBJECT (fbdev2sink, "set_property");
-  g_return_if_fail (GST_IS_FBDEV2SINK (object));
-}
-
-static void
-gst_fbdev2sink_get_property (GObject * object, guint property_id,
-    GValue * value, GParamSpec * pspec)
-{
-  GstFbdev2sink *fbdev2sink = GST_FBDEV2SINK (object);
-
-  GST_DEBUG_OBJECT (fbdev2sink, "get_property");
-  g_return_if_fail (GST_IS_FBDEV2SINK (object));
 }
 
 static gboolean
