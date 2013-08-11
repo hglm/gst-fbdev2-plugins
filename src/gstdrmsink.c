@@ -232,12 +232,16 @@ static void
 gst_drmsink_init (GstDrmsink *drmsink) {
   GstFramebufferSink *framebuffersink = GST_FRAMEBUFFERSINK (drmsink);
 
+  drmsink->fd = -1;
+
   /* Override the default value of the device property from GstFramebufferSink. */
   framebuffersink->device = g_strdup (DEFAULT_DRM_DEVICE);
+  /* Override the default value of the pan-does-vsync property from GstFramebufferSink. */
+  framebuffersink->pan_does_vsync = TRUE;
 
   /* Set the initial values of the properties.*/
   drmsink->preferred_connector_id = - 1;
-  drmsink->fd = -1;
+
   gst_drmsink_reset (drmsink);
 }
 
@@ -558,7 +562,6 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
      assume three screen buffers are available and rely on a specific setting of
      the video-memory property in order to use more video memory. */
   *video_memory_size = size * 3 + 1024;
-  framebuffersink->max_framebuffers = 3;
   if (framebuffersink->max_video_memory_property > 0)
     *video_memory_size = (guint64)framebuffersink->max_video_memory_property
         * 1024 * 1024;

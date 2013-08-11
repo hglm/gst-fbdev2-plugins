@@ -27,16 +27,19 @@ This is work-in-progress although the plugins should be quite usable in
 its current form.
 
 The main features are direct rendering into video memory (instead of
-the two-pass memcpy implementation of the regular fbdevsink plugin) and
-support for page flipping/vsync, and several configurable properties
-regulating video output and linux framebuffer configuration.
+the two-pass memcpy implementation of the regular fbdevsink plugin),
+support for page flipping/vsync with multiple buffers, and several
+configurable properties regulating video output and Linux framebuffer
+configuration.
 
 Using video memory buffers has a disadvantage though: reading back from
-the buffers is slow (video memory is uncached is often not designed to be
-read from the CPU). Most movie playing pipelines do want to read back from
-video memory, so in this case not using a buffer pool but simply copying
-each frame from system memory will be faster. Other sources such as
-videotestsrc do not read back from the buffers and are fast.
+the buffers is slow (video memory is often on a seperate card, in which case
+reading is very slow, and in a unified memory architecture video memory is
+often uncached or not optimally configured for read-back). Most movie playing
+pipelines do want to read back from video memory, so in this case not using
+a buffer pool but simply copying each frame from system memory (by not enabling
+the buffer-pool option) will be faster. Other sources such as videotestsrc do
+not read back from the buffers and are fast.
 
 *** Usage ***
 
@@ -73,6 +76,27 @@ switching consoles helps in this case.
 
 Run "gst-inspect-1.0 fbdev2sink" for an overview of configurable property
 settings.
+
+*** Usage (drmsink) ***
+
+By default drmsink will assume there is enough video memory for three screen
+buffers. The video-memory property can be used to set the amount of video
+memory used.
+
+Example launch line:
+
+gst-launch-1.0 videotestsrc horizontal-speed=5 ! drmsink buffer-pool=true \
+full-screen=true fps=30 video-memory=64 >output
+
+This pipeline writes directly into video memory, which is fast since
+videotestsrc doesn't read back from the output buffers. 64MB of video memory
+is assumed to be available.
+
+gst-launch-1.0 playbin uri=file:///home/me/videos/video.mp4 \
+video-sink="drmsink buffer-pool=false full-screen=true" >output
+
+This pipeline uses system memory buffers to play a movie but uses drmsink's
+default of using triple buffering to update the screen.
 
 *** Usage (sunixfbsink) ***
 
@@ -130,4 +154,3 @@ Run gst-inspect-1.0 fbdev2sink to verify everything is installed correctly.
 - Slow video memory read access impacts performance for movie playback
   when the buffer pool in video memory is enabled. Maybe autodetect the
   best strategy.
-
