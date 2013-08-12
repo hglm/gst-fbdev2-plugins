@@ -119,7 +119,6 @@
 #include <xf86drmMode.h>
 #include <xf86drm.h>
 #include <libkms.h>
-#include <gbm.h>
 
 #include <gst/gst.h>
 #include <gst/video/gstvideosink.h>

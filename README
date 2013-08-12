@@ -135,6 +135,7 @@ On a Debian-based system, GStreamer 1.0 and a number of associated
 development packages need to be installed. These include:
 
 	libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libglib2.0-dev
+	libdrm-dev libtool autoconf
 
 Run autogen.sh, then make, and sudo make install.
 
