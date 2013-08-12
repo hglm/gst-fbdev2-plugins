@@ -73,13 +73,12 @@
  * Run videotstsrc at native screen resolution
  * |[
  * gst-launch -v videotestsrc horizontal_speed=10 ! drmsink \
- * native-resolution=true buffer-pool=true graphics-mode=true
+ * native-resolution=true buffer-pool=true
  * ]|
  * This command illustrates some of the plugin's optimization features
- * by rendering to video memory with vsync and page flipping in
- * console graphics mode. There should be no tearing with page flipping/
- * vsync enabled. You might have to use the fps property to reduce the frame
- * rate on slower systems.
+ * by rendering to video memory with vsync and page flipping. There should
+ * be no tearing with page flipping/vsync enabled. You might have to use
+ * the fps property to reduce the frame rate on slower systems.
  * |[
  * gst-launch playbin uri=[uri] video-sink="drmsink native-resolution=true"
  * ]|
@@ -88,12 +87,10 @@
  * <refsect2>
  * <title>Caveats</title>
  * <para>
- * The actual implementation of the Linux framebuffer API varies between
- * systems, and methods beyond the most basic operating mode may not work
- * correctly on some systems. This primarily applies to page flipping
- * and vsync. The API implementation may be slower than expected on certain
- * hardware due to, for example, extra hidden vsyncs being performed in the
- * pan function. The "pan-does-vsync" option may help in that case.
+ * The actual implementation of the Linux DRM API varies between
+ * systems. Some implementation fail to implement a real vsync but instead
+ * seem to be use some kind of fake timer close to the refresh frequency,
+ * which will produce tearing.
  * </para>
  * </refsect2>
  */
@@ -700,7 +697,7 @@ GstAllocationParams *params)
   mem->creq.flags = 0;
 
   /* handle, pitch and size will be returned in the creq struct. */
-  ret = drmIoctl(drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_CREATE_DUMB,
+  ret = drmIoctl (drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_CREATE_DUMB,
       &mem->creq);
   if (ret < 0) {
     g_print ("Creating dumb drm buffer failed.\n");
@@ -714,7 +711,7 @@ GstAllocationParams *params)
     depth += GST_VIDEO_FORMAT_INFO_DEPTH (&drmsink_video_memory_allocator->format_info, i);
 
   /* create framebuffer object for the dumb-buffer */
-  ret = drmModeAddFB(drmsink_video_memory_allocator->drmsink->fd,
+  ret = drmModeAddFB (drmsink_video_memory_allocator->drmsink->fd,
       drmsink_video_memory_allocator->w, drmsink_video_memory_allocator->h, depth,
       GST_VIDEO_FORMAT_INFO_PSTRIDE (&drmsink_video_memory_allocator->format_info, 0) * 8,
       mem->creq.pitch, mem->creq.handle, &mem->fb);
@@ -727,25 +724,25 @@ GstAllocationParams *params)
   /* the framebuffer "fb" can now used for scanout with KMS */
 
   /* prepare buffer for memory mapping */
-  memset(&mem->mreq, 0, sizeof(mem->mreq));
+  memset (&mem->mreq, 0, sizeof(mem->mreq));
   mem->mreq.handle = mem->creq.handle;
-  ret = drmIoctl(drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_MAP_DUMB,
+  ret = drmIoctl (drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_MAP_DUMB,
       &mem->mreq);
   if (ret) {
     g_print ("DRM buffer preparation failed.\n");
-    drmModeRmFB(drmsink_video_memory_allocator->drmsink->fd, mem->creq.handle);
+    drmModeRmFB (drmsink_video_memory_allocator->drmsink->fd, mem->creq.handle);
     goto fail_destroy;
   }
 
   /* mem->mreq.offset now contains the new offset that can be used with mmap() */
 
   /* perform actual memory mapping */
-  mem->map_address = mmap(0, mem->creq.size, PROT_READ | PROT_WRITE, MAP_SHARED,
+  mem->map_address = mmap (0, mem->creq.size, PROT_READ | PROT_WRITE, MAP_SHARED,
       drmsink_video_memory_allocator->drmsink->fd, mem->mreq.offset);
   if (mem->map_address == MAP_FAILED) {
     /* memory-mapping failed; see "errno" */
     g_print ("Memory mapping of DRM buffer failed.\n");
-    drmModeRmFB(drmsink_video_memory_allocator->drmsink->fd, mem->creq.handle);
+    drmModeRmFB (drmsink_video_memory_allocator->drmsink->fd, mem->creq.handle);
     goto fail_destroy;
   }
 
@@ -760,7 +757,7 @@ GstAllocationParams *params)
       mem->map_address, align, mem);
 #endif
 
-  memset (mem->map_address, rand() | 0xFF000000, size);
+  memset (mem->map_address, 0, size);
 
   GST_OBJECT_UNLOCK (allocator);
   return (GstMemory *) mem;
@@ -768,7 +765,7 @@ GstAllocationParams *params)
 fail_destroy :
 
     dreq.handle = mem->creq.handle;
-    drmIoctl(drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
+    drmIoctl (drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
     g_slice_free (GstDrmSinkVideoMemory, mem);
     GST_OBJECT_UNLOCK (allocator);
     return NULL;
@@ -786,9 +783,9 @@ gst_drmsink_video_memory_allocator_free (GstAllocator * allocator, GstMemory * m
 
   drmsink_video_memory_allocator->total_allocated -= mem->size;
 
-  munmap(vmem->map_address, vmem->creq.size);
+  munmap (vmem->map_address, vmem->creq.size);
   dreq.handle = vmem->creq.handle;
-  drmIoctl(drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
+  drmIoctl (drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
 
   g_slice_free1 (sizeof (GstDrmSinkVideoMemory), vmem);
 
@@ -917,8 +914,6 @@ gst_drmsink_pan_display (GstFramebufferSink *framebuffersink,
 {
   GstDrmsink *drmsink = GST_DRMSINK (framebuffersink);
   GstDrmSinkVideoMemory *vmem = (GstDrmSinkVideoMemory *)memory;
-  fd_set fds;
-  struct timeval tv;
   uint32_t connectors[1];
   gchar *s;
 
@@ -953,21 +948,6 @@ gst_drmsink_pan_display (GstFramebufferSink *framebuffersink,
     GST_DRMSINK_INFO_OBJECT (drmsink, "drmModePageFlip failed");
     return;
   }
-
-#if 0
-  memset (&tv, 0, sizeof (tv));
-  FD_ZERO (&fds);
-  while (TRUE) {
-    FD_SET (drmsink->fd, &fds);
-    tv.tv_sec = 5;
-    select (drmsink->fd + 1, &fds, NULL, NULL, &tv);
-    if (FD_ISSET (drmsink->fd, &fds)) {
-      drmHandleEvent(drmsink->fd, drmsink->event_context);
-      if (drmsink->page_flip_occurred)
-          break;
-    }
-  }
-#endif
 }
 
 static void
@@ -984,18 +964,4 @@ gst_drmsink_wait_for_vsync (GstFramebufferSink *framebuffersink)
   vbl.request.type = DRM_VBLANK_RELATIVE | DRM_VBLANK_EVENT;
   vbl.request.sequence = 1;
   drmWaitVBlank(drmsink->fd, &vbl);
-#if 0
-  memset (&tv, 0, sizeof (tv));
-  FD_ZERO (&fds);
-  while (TRUE) {
-    FD_SET (drmsink->fd, &fds);
-    tv.tv_sec = 5;
-    select (drmsink->fd + 1, &fds, NULL, NULL, &tv);
-    if (FD_ISSET (drmsink->fd, &fds)) {
-      drmHandleEvent(drmsink->fd, drmsink->event_context);
-      if (drmsink->vblank_occurred)
-          break;
-    }
-  }
-#endif
 }

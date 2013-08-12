@@ -298,15 +298,14 @@ gst_fbdevframebuffersink_open_hardware (GstFramebufferSink *framebuffersink,
   /* Initialize video memory. */
   gst_fbdevframebuffersink_video_memory_init(fbdevframebuffersink->framebuffer,
       fbdevframebuffersink->framebuffer_map_size);
-  return TRUE;
 
   {
     gchar *s = g_strdup_printf("Succesfully opened fbdev framebuffer device %s, "
         "mapped sized %td MB of which %" PRIu64 " MB (%d buffers) usable for page flipping",
         framebuffersink->device,
         fbdevframebuffersink->framebuffer_map_size / (1024 * 1024),
-        (uint64_t)framebuffersink->max_framebuffers * fixinfo.line_length *
-        GST_VIDEO_INFO_HEIGHT (info) / (1024 * 1024), framebuffersink->max_framebuffers);
+        (uint64_t)max_framebuffers * fixinfo.line_length *
+        GST_VIDEO_INFO_HEIGHT (info) / (1024 * 1024), max_framebuffers);
     GST_FBDEVFRAMEBUFFERSINK_INFO_OBJECT(fbdevframebuffersink, s);
     g_free (s);
   }
@@ -479,9 +478,6 @@ static GstFbdevFramebufferSinkVideoMemoryStorage *video_memory_storage;
 static void
 gst_fbdevframebuffersink_video_memory_init (gpointer framebuffer, gsize framebuffer_size) {
   video_memory_storage = g_slice_new (GstFbdevFramebufferSinkVideoMemoryStorage);
-  if (!video_memory_storage) {
-    g_print("Could not allocate video memory storage\n");
-  }
   gst_mini_object_init (GST_MINI_OBJECT_CAST (video_memory_storage),
       GST_MINI_OBJECT_FLAG_LOCKABLE,
       gst_fbdev_framebuffer_sink_video_memory_storage_get_type (),
@@ -525,12 +521,10 @@ gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator, 
 
   GST_DEBUG ("alloc frame %u", size);
 
-  GST_OBJECT_LOCK (video_memory_storage);
+  gst_mini_object_lock (GST_MINI_OBJECT_CAST (video_memory_storage), GST_LOCK_FLAG_EXCLUSIVE);
 
-  if (allocation_params == NULL)
-    params = &fbdevframebuffersink_allocator->params;
-  else
-    params = allocation_params;
+  /* Always ignore allocation_params, but use our own specific alignment. */
+  params = &fbdevframebuffersink_allocator->params;
 
   align_bytes = ALIGNMENT_GET_ALIGN_BYTES(video_memory_storage->end_marker, params->align);
   framebuffer_offset = video_memory_storage->end_marker + align_bytes;
@@ -562,7 +556,7 @@ gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator, 
       }
       if (chain == NULL) {
         GST_ERROR_OBJECT (video_memory_storage, "Out of video memory");
-        GST_OBJECT_UNLOCK (video_memory_storage);
+        gst_mini_object_unlock (GST_MINI_OBJECT_CAST (video_memory_storage), GST_LOCK_FLAG_EXCLUSIVE);
         return NULL;
       }
   }
@@ -594,10 +588,10 @@ gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator, 
   video_memory_storage->chain = g_list_insert_before (video_memory_storage->chain,
       chain, chain_entry);
 
-  GST_OBJECT_UNLOCK(video_memory_storage);
+  gst_mini_object_unlock (GST_MINI_OBJECT_CAST (video_memory_storage), GST_LOCK_FLAG_EXCLUSIVE);
 
-//  g_print ("Allocated video memory buffer of size %d at %p, align %d, mem = %p\n", size,
-//      mem->data, align, mem);
+  g_print ("Allocated video memory buffer of size %d at %p, align %d, mem = %p\n", size,
+      mem->data, params->align, mem);
 
   return (GstMemory *) mem;
 }
@@ -608,7 +602,7 @@ gst_fbdevframebuffersink_video_memory_allocator_free (GstAllocator * allocator, 
   GstFbdevFramebufferSinkVideoMemory *vmem = (GstFbdevFramebufferSinkVideoMemory *) mem;
   GList *chain;
 
-  GST_OBJECT_LOCK (video_memory_storage);
+  gst_mini_object_lock (GST_MINI_OBJECT_CAST (video_memory_storage), GST_LOCK_FLAG_EXCLUSIVE);
 
   chain = video_memory_storage->chain;
 
@@ -630,14 +624,14 @@ gst_fbdevframebuffersink_video_memory_allocator_free (GstAllocator * allocator, 
       }
       video_memory_storage->chain = g_list_delete_link (video_memory_storage->chain, chain);
       video_memory_storage->total_allocated -= mem->size;
-      GST_OBJECT_UNLOCK (video_memory_storage);
+      gst_mini_object_unlock (GST_MINI_OBJECT_CAST (video_memory_storage), GST_LOCK_FLAG_EXCLUSIVE);
       g_slice_free (GstFbdevFramebufferSinkVideoMemory, vmem);
       return;
     }
     chain = g_list_next (chain);
   }
 
-  GST_OBJECT_UNLOCK (video_memory_storage);
+  gst_mini_object_unlock (GST_MINI_OBJECT_CAST (video_memory_storage), GST_LOCK_FLAG_EXCLUSIVE);
   GST_ERROR_OBJECT (video_memory_storage, "video_memory_free failed");
 }
 

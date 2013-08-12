@@ -2286,6 +2286,7 @@ gst_framebuffersink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
 
   if (pool == NULL && need_pool) {
     /* Provide a regular system memory buffer pool. */
+    GstAllocator *allocator;
 
     GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "create new system memory pool");
     pool = gst_video_buffer_pool_new ();
@@ -2294,9 +2295,13 @@ gst_framebuffersink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
 
     config = gst_buffer_pool_get_config (pool);
     gst_buffer_pool_config_set_params (config, caps, info.size, 0, 0);
+
+    allocator = gst_allocator_find (NULL);
+    gst_buffer_pool_config_set_allocator (config, allocator, NULL);
     if (!gst_buffer_pool_set_config (pool, config))
       goto config_failed;
 
+    gst_query_add_allocation_param (query, allocator, NULL);
     gst_query_add_allocation_pool (query, pool, size, 0, 0);
     gst_object_unref (pool);
   }
