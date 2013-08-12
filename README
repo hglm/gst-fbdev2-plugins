@@ -35,12 +35,34 @@ configuration.
 Using video memory buffers has a disadvantage though: reading back from
 the buffers is slow (video memory is often on a seperate card, in which case
 reading is very slow, and in a unified memory architecture video memory is
-often uncached or not optimally configured for read-back). Most movie playing
+often uncached or not optimally configured for read-back). Some movie playing
 pipelines do want to read back from video memory, so in this case not using
 a buffer pool but simply copying each frame from system memory (by not enabling
-the buffer-pool option) will be faster. Other sources such as videotestsrc do
-not read back from the buffers and are fast. The "benchmark" property can
-be set to true on all derived sinks to test video memory read/write speed.
+the buffer-pool option) will be faster. However, when videoconvert
+filter is the last processing element before the sink, it is unlikely that the
+video memory buffers will be read back. Software scaling elements such as
+videoscalemay read back from their output buffer. Other sources such as
+videotestsrc neverread back from the buffers and can be run at full speed
+with the buffer pool enabled. The "benchmark" property can be set to true on
+all derived sinks to test video memory read/write speed.
+
+*** Installation ***
+
+On a Debian-based system, GStreamer 1.0 and a number of associated
+development packages need to be installed. These include:
+
+	libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libglib2.0-dev
+	libdrm-dev libtool autoconf
+
+Run autogen.sh, then make, and sudo make install.
+
+By default the plugins and library are installed into
+/usr/local/lib/gstreamer-1.0 and /usr/local/lib/. You need to set the
+GST_PLUGIN_PATH environment library to /usr/local/lib/gstreamer-1.0 for the
+plugins to be recognized. Also run sudo ldconfig after installing;
+/usr/local/lib must be in the ldconfig search path.
+
+Run gst-inspect-1.0 fbdev2sink to verify everything is installed correctly.
 
 *** Usage (fbdev2sink) ***
 
@@ -79,6 +101,8 @@ switching consoles helps in this case.
 Run "gst-inspect-1.0 fbdev2sink" for an overview of configurable property
 settings.
 
+Note: Using the fb device requires root priviledges on most systems.
+
 *** Usage (drmsink) ***
 
 By default drmsink will assume there is enough video memory for three screen
@@ -87,18 +111,36 @@ memory used.
 
 Example launch line:
 
-gst-launch-1.0 videotestsrc horizontal-speed=5 ! drmsink buffer-pool=true \
-full-screen=true fps=30 video-memory=64 >output
+gst-launch-1.0 videotestsrc horizontal-speed=10 ! drmsink full-screen=true \
+fps=60
 
-This pipeline writes directly into video memory, which is fast since
-videotestsrc doesn't read back from the output buffers. 64MB of video memory
-is assumed to be available.
+This pipeline uses drmsink's defaults (not writing directly into video memory
+but using page-flipping with three buffers to synchronize screen updates).
+
+gst-launch-1.0 videotestsrc horizontal-speed=5 ! drmsink buffer-pool=true \
+full-screen=true video-memory=64 fps=30 >output
+
+This pipeline writes directly into video memory (buffer-pool=true), which is
+fast since videotestsrc doesn't read back from the output buffers. 64MB of
+video memory is assumed to be available.
 
 gst-launch-1.0 playbin uri=file:///home/me/videos/video.mp4 \
-video-sink="drmsink buffer-pool=false full-screen=true" >output
+video-sink="drmsink full-screen=true" >output
 
 This pipeline uses system memory buffers to play a movie but uses drmsink's
 default of using triple buffering to update the screen.
+
+Notes:
+
+As of kernel 3.8.x, the Nouveau NVIDIA drm kernel driver doesn't seem
+to properly implement syncing to vblank when page flipping and instead appears
+to be faking it with a seperate timer set to the approximate refresh rate. This
+results in noticable tearing with the vertical position of the tearing boundary
+moving slowly up or down (representing the mismatch between the faked timer
+and the real vsync frequency). This is easily observable when running the
+first videotestsrc pipeline mentioned above.
+
+DRM does not require root priviledges.
 
 *** Usage (sunixfbsink) ***
 
@@ -129,24 +171,6 @@ Y444	Planar 4:4:4 YUV
 AYUV	Packed AYUV with alpha channel (A0-Y0-U0-V0 ...)
 BGRx	RGB
 
-*** Installation ***
-
-On a Debian-based system, GStreamer 1.0 and a number of associated
-development packages need to be installed. These include:
-
-	libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libglib2.0-dev
-	libdrm-dev libtool autoconf
-
-Run autogen.sh, then make, and sudo make install.
-
-By default the plugins and library are installed into
-/usr/local/lib/gstreamer-1.0 and /usr/local/lib/. You need to set the
-GST_PLUGIN_PATH environment library to /usr/local/lib/gstreamer-1.0 for the
-plugins to be recognized. Also run sudo ldconfig after installing;
-/usr/local/lib must be in the ldconfig search path.
-
-Run gst-inspect-1.0 fbdev2sink to verify everything is installed correctly.
-
 *** To do ***
 
 - Test on different platforms.
@@ -154,8 +178,12 @@ Run gst-inspect-1.0 fbdev2sink to verify everything is installed correctly.
 - The plugin is set up to use a single source. Reconfiguring a running
   pipeline might not work.
 
-- Slow video memory read access impacts performance for movie playback
+- Slow video memory read access may impact performance for movie playback
   when the buffer pool in video memory is enabled. Maybe autodetect the
   best strategy.
 
 - Clean up locking and perhaps use a seperate rendering thread.
+
+- High-resolution movie playback doesn't seem to be as smooth as possible
+  when using playbin. It may be possible to more equally distribute
+  processing among different threads/CPU cores.
