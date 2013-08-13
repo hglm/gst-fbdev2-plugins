@@ -171,6 +171,17 @@ Y444	Planar 4:4:4 YUV
 AYUV	Packed AYUV with alpha channel (A0-Y0-U0-V0 ...)
 BGRx	RGB
 
+*** Troubleshooting ***
+
+Additional debug messages can be enabled with the generic GStreamer command
+line option --gst-debug. For fbdev2sink:
+
+	--gst-debug=framebuffersink:5,fbdevframebuffersink:5,fbdev2sink:5
+
+For drmsink:
+
+        --gst-debug=framebuffersink:5,drmsink:5
+
 *** To do ***
 
 - Test on different platforms.
@@ -182,7 +193,7 @@ BGRx	RGB
   when the buffer pool in video memory is enabled. Maybe autodetect the
   best strategy.
 
-- Clean up locking and perhaps use a seperate rendering thread.
+- Perhaps use a seperate rendering thread.
 
 - High-resolution movie playback doesn't seem to be as smooth as possible
   when using playbin. It may be possible to more equally distribute
@@ -194,3 +205,7 @@ BGRx	RGB
   At the moment we check whether the buffer pool has already been activated,
   if not we provide same video memory buffer pool.
 
+- The preserve-par property is currently disabled. Because we can't rely on
+  changing hardware scaling parameters when set_caps is called (as is done is
+  elements like xvimagesink), we need to inform upstream to do the appropriate
+  scaling during caps negotiation (get_caps).

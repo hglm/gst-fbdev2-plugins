@@ -110,7 +110,6 @@ struct _GstFramebufferSink
   /* alignment requirements. */
   gboolean overlay_alignment_is_native;
 
-  GMutex flow_lock;
   GstBufferPool *pool;
   gboolean have_caps;
   GstCaps *caps;

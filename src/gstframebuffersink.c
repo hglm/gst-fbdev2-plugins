@@ -20,11 +20,12 @@
  * SECTION:class-GstFramebufferSink
  *
  * The GstFramebufferSink class implements an optimized video sink
- * for the Linux console framebuffer. It is used as the basis for the
- * fbdev2sink plugin. It can write directly into video memory with
- * page flipping support, and should be usable by a wide variety of
- * devices. The class can be derived for device-specific implementations
- * with hardware acceleration.
+ * for framebuffer devices. It is used as the basis for the
+ * fbdev2sink en drmsink plugins. It can manage multiple buffers,
+ * writing directly into video memory with page flipping support, and
+ * should be usable by a wide variety of devices. The class can be
+ * derived for device specific implementations with optional support
+ * for hardware scaling overlays.
  *
  * <refsect2>
  * <title>Property settings,<title>
@@ -83,13 +84,14 @@ GST_DEBUG_CATEGORY_STATIC (gst_framebuffersink_debug_category);
 /* Provide the same pool for repeated requests. */
 #define USE_SAME_POOL
 /* Provide another video memory pool for repeated requests. */
-// #define MULTIPLE_VIDEO_MEMORY_POOLS
+/* #define MULTIPLE_VIDEO_MEMORY_POOLS */
 /* Provide half of the available video memory pool buffer per request. */
-// #define HALF_POOLS
+/* #define HALF_POOLS */
 
+/* #define INCLUDE_PRESERVE_PAR_PROPERTY */
 
 /* Function to produce informational output if silent property is not set; */
-/* if the silent property is enabled only debugging info is produced. */
+/* if the silent property is set only debugging info is produced. */
 static void GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (GstFramebufferSink * framebuffersink,
 const gchar *message) {
   if (!framebuffersink->silent)
@@ -147,7 +149,9 @@ enum
   PROP_WIDTH_BEFORE_SCALING,
   PROP_HEIGHT_BEFORE_SCALING,
   PROP_FULL_SCREEN,
+#ifdef INCLUDE_PRESERVE_PAR_PROPERTY
   PROP_PRESERVE_PAR,
+#endif
   PROP_CLEAR,
   PROP_FRAMES_PER_SECOND,
   PROP_BUFFER_POOL,
@@ -250,10 +254,12 @@ gst_framebuffersink_class_init (GstFramebufferSinkClass* klass)
                           "(equivalent to setting width and "
                           "height to screen dimensions)",
                           FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+#ifdef INCLUDE_PRESERVE_PAR_PROPERTY
   g_object_class_install_property (gobject_class, PROP_PRESERVE_PAR,
     g_param_spec_boolean ("preserve-par", "Preserve pixel aspect ratio",
 			  "Preserve the pixel aspect ratio by adding black boxes if necessary",
                           FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+#endif
   g_object_class_install_property (gobject_class, PROP_CLEAR,
     g_param_spec_boolean ("clear", "Clear the screen",
 			  "Clear the screen to black before playing",
@@ -471,9 +477,11 @@ gst_framebuffersink_set_property (GObject * object, guint property_id,
     case PROP_FULL_SCREEN:
       framebuffersink->full_screen = g_value_get_boolean (value);
       break;
+#ifdef INCLUDE_PRESERVE_PAR_PROPERTY
     case PROP_PRESERVE_PAR:
       framebuffersink->preserve_par = g_value_get_boolean (value);
       break;
+#endif
     case PROP_CLEAR:
       framebuffersink->clear = g_value_get_boolean (value);
       break;
@@ -558,9 +566,11 @@ gst_framebuffersink_get_property (GObject * object, guint property_id,
     case PROP_FULL_SCREEN:
       g_value_set_boolean (value, framebuffersink->full_screen);
       break;
+#ifdef INCLUDE_PRESERVE_PAR_PROPERTY
     case PROP_PRESERVE_PAR:
       g_value_set_boolean (value, framebuffersink->preserve_par);
       break;
+#endif
     case PROP_CLEAR:
       g_value_set_boolean (value, framebuffersink->clear);
       break;
@@ -996,8 +1006,6 @@ gst_framebuffersink_start (GstBaseSink *sink)
     close (kd_fd);
   }
 
-  g_mutex_init (&framebuffersink->flow_lock);
-
 continue_initialization:
 
   framebuffersink->current_framebuffer_index = 0;
@@ -1042,7 +1050,8 @@ gst_framebuffersink_caps_set_preferences (GstFramebufferSink *framebuffersink, G
   /* If hardware scaling is supported, and a specific video size is requested, allow any reasonable size */
   /* (except when the width/height_before_scaler properties are set) and use the scaler. */
   if ((framebuffersink->requested_video_width != 0 || framebuffersink->requested_video_height != 0)
-      && gst_framebuffersink_video_format_supported_by_overlay (framebuffersink, GST_VIDEO_FORMAT_BGRx)) {
+      && gst_framebuffersink_video_format_supported_by_overlay (framebuffersink,
+      GST_VIDEO_INFO_FORMAT (&framebuffersink->screen_info))) {
     if (framebuffersink->width_before_scaling != 0)
       gst_caps_set_simple (caps, "width", G_TYPE_INT, framebuffersink->width_before_scaling, NULL);
     else
@@ -1106,6 +1115,7 @@ static GstCaps *gst_framebuffersink_get_default_caps (GstFramebufferSink *frameb
     f++;
   }
 
+  /* Add the standard framebuffer format. */
   framebuffer_caps = gst_caps_new_simple ("video/x-raw", "format", G_TYPE_STRING,
       gst_video_format_to_string (GST_VIDEO_INFO_FORMAT (&framebuffersink->screen_info)),
       "interlace-mode", G_TYPE_STRING, "progressive",
@@ -1177,10 +1187,11 @@ static GstVideoFormat gst_framebuffersink_get_preferred_video_format_from_caps (
 /* get_caps is called by GstBaseSink for two purposes:
    1. When filter is not NULL, it is a GST_QUERY_CAPS query.
       The function should suggest caps based on filter.
-      It is allowed that the the suggested caps are not a subset of filter.
+      It is advisable that the the suggested caps are a subset of filter.,
+      otherwise negotation may fail.
    2. When filter is NULL, it is a GST_QUERY_ACCEPT_CAPS query.
       The function should return the allowed caps. GstBaseSink actually
-      hides the specific caps from the upstream query. */
+      hides the specific caps used by the upstream query. */
 
 static GstCaps *
 gst_framebuffersink_get_caps (GstBaseSink * sink, GstCaps * filter)
@@ -1895,7 +1906,8 @@ reconfigure:
   /* When using buffer pools, do the appropriate checks and allocate a */
   /* new buffer pool. */
   if (framebuffersink->use_buffer_pool &&
-  framebuffersink->framebuffer_video_width_in_bytes != GST_VIDEO_INFO_COMP_STRIDE (&framebuffersink->screen_info, 0)) {
+      framebuffersink->framebuffer_video_width_in_bytes != GST_VIDEO_INFO_COMP_STRIDE (
+      &framebuffersink->screen_info, 0)) {
     GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, "Cannot use buffer pool in video "
         "memory because video width is not equal to the configured framebuffer "
         "width");
@@ -2061,8 +2073,6 @@ gst_framebuffersink_stop (GstBaseSink * sink)
     }
   }
 
-  g_mutex_clear (&framebuffersink->flow_lock);
-
   if (framebuffersink->use_graphics_mode) {
     int kd_fd;
     kd_fd = open ("/dev/tty0", O_RDWR);
@@ -2114,8 +2124,12 @@ gst_framebuffersink_show_frame_memcpy (GstFramebufferSink *framebuffersink, GstB
   return GST_FLOW_OK;
 }
 
-/* This show frame function can deal with both video memory buffers */
-/* that require a pan and with regular buffers that need to be memcpy-ed. */
+/* The show frame function can deal with both video memory buffers
+   that require a pan and with regular buffers that need to be memcpy-ed.
+   There are seperate show_frame functions for overlays (with a video memory
+   or a system memory buffer pool), screen buffers with buffer 
+   pool in video memory, and screen buffers with a buffer pool in
+   system memory. */
 
 static GstFlowReturn
 gst_framebuffersink_show_frame_buffer_pool (GstFramebufferSink * framebuffersink,
@@ -2195,14 +2209,23 @@ GstBuffer * buf)
     gst_memory_map(mem, &mapinfo, GST_MAP_READ);
 
     if (framebuffersink->use_buffer_pool) {
-      /* When using a buffer pool in video memory, being requested to show an overlay */
-      /* frame from system memory poses a bit of problem. We need to allocate a temporary video */
-      /* memory area to store the overlay frame and show it. */
+      /* When using a buffer pool in video memory, being requested to show an overlay
+         frame from system memory (which shouldn't normally happen) poses a bit of
+         problem. We need to allocate a temporary video memory area to store the overlay
+         frame and show it. */
+      GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
+          "Unexpected system memory overlay in buffer pool mode");
+
       GstMemory *vmem;
       vmem = gst_allocator_alloc(framebuffersink->overlay_video_memory_allocator, mapinfo.size,
           NULL);
-      gst_framebuffersink_put_overlay_image_memcpy (framebuffersink, vmem, mapinfo.data);
-      gst_allocator_free (framebuffersink->overlay_video_memory_allocator, vmem);
+      if (vmem == NULL)
+        GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
+            "Could not allocate temporary video memory buffer for overlay");
+      else {
+        gst_framebuffersink_put_overlay_image_memcpy (framebuffersink, vmem, mapinfo.data);
+        gst_allocator_free (framebuffersink->overlay_video_memory_allocator, vmem);
+      }
 
       framebuffersink->stats_video_frames_system_memory++;
       return GST_FLOW_OK;
@@ -2440,7 +2463,7 @@ config_failed:
   }
 }
 
-/* The following function also works for all video memory types as along as the */
+/* The following function also works for all video memory types as long as the */
 /* GST_MEMORY_FLAG_VIDEO_MEMORY flag is set on the memory object. */
 static gboolean
 gst_framebuffersink_is_video_memory (GstFramebufferSink *framebuffersink, GstMemory * mem)
