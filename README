@@ -187,3 +187,10 @@ BGRx	RGB
 - High-resolution movie playback doesn't seem to be as smooth as possible
   when using playbin. It may be possible to more equally distribute
   processing among different threads/CPU cores.
+
+- For certain common movie file types set_caps and propose_allocation are
+  called twice by upstream. This can be a problem because we usually provide
+  all available video memory buffers in the first call to propose_allocation.
+  At the moment we check whether the buffer pool has already been activated,
+  if not we provide same video memory buffer pool.
+

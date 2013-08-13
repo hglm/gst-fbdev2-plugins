@@ -79,23 +79,23 @@
 GST_DEBUG_CATEGORY_STATIC (gst_framebuffersink_debug_category);
 #define GST_CAT_DEFAULT gst_framebuffersink_debug_category
 
-// #define EXTRA_DEBUG
-
 /* Definitions to influence buffer pool allocation. */
 /* Provide the same pool for repeated requests. */
-// #define USE_SAME_POOL
+#define USE_SAME_POOL
 /* Provide another video memory pool for repeated requests. */
 // #define MULTIPLE_VIDEO_MEMORY_POOLS
 /* Provide half of the available video memory pool buffer per request. */
 // #define HALF_POOLS
 
 
-/* Function to produce both normal message and debug info. */
-static void GST_FRAMEBUFFERSINK_INFO_OBJECT (GstFramebufferSink * framebuffersink,
+/* Function to produce informational output if silent property is not set; */
+/* if the silent property is enabled only debugging info is produced. */
+static void GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (GstFramebufferSink * framebuffersink,
 const gchar *message) {
   if (!framebuffersink->silent)
     g_print ("%s.\n", message);
-  GST_INFO_OBJECT (framebuffersink, message);
+  else
+    GST_INFO_OBJECT (framebuffersink, message);
 }
 
 #define ALIGNMENT_GET_ALIGN_BYTES(offset, align) \
@@ -616,13 +616,6 @@ gst_framebuffersink_put_image_memcpy (GstFramebufferSink *framebuffersink, uint8
   int i;
   GstMapInfo mapinfo;
 
-  if (framebuffersink->use_buffer_pool) {
-    /* Hack: when using a buffer pool in video memory, and a system memory buffer is */
-    /* inadvertenty provided, just ignore it. */
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink,
-        "Unexpected system memory buffer provided in buffer-pool mode");
-    return;
-  }
   gst_memory_map (framebuffersink->screens[framebuffersink->current_framebuffer_index], &mapinfo, GST_MAP_WRITE);
   dest = mapinfo.data;
   dest += framebuffersink->cy * GST_VIDEO_INFO_COMP_STRIDE (&framebuffersink->screen_info, 0)
@@ -894,7 +887,7 @@ gst_framebuffersink_benchmark (GstFramebufferSink *framebuffersink)
       }
   }
   if (n == 0) {
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "Could not allocate buffers for benchmark");
+    GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, "Could not allocate buffers for benchmark");
     goto no_buffers;
   }
 
@@ -983,7 +976,7 @@ gst_framebuffersink_start (GstBaseSink *sink)
       framebuffersink->max_framebuffers);
   if (framebuffersink->vsync)
     g_sprintf(s + strlen(s), ", vsync enabled");
-  GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, s);
+  GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, s);
 
   if (framebuffersink->full_screen) {
       framebuffersink->requested_video_width = GST_VIDEO_INFO_WIDTH (&framebuffersink->screen_info);
@@ -999,7 +992,7 @@ gst_framebuffersink_start (GstBaseSink *sink)
         goto error_setting_graphics_mode;
     if (ioctl (kd_fd, KDSETMODE, KD_GRAPHICS) < 0)
         goto error_setting_graphics_mode;
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "Setting console to KD_GRAPHICS mode");
+    GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, "Setting console to KD_GRAPHICS mode");
     close (kd_fd);
   }
 
@@ -1044,7 +1037,7 @@ error_setting_graphics_mode:
 
 static void
 gst_framebuffersink_caps_set_preferences (GstFramebufferSink *framebuffersink, GstCaps *caps,
-    gboolean no_par)
+    gboolean fix_width_if_possible)
 {
   /* If hardware scaling is supported, and a specific video size is requested, allow any reasonable size */
   /* (except when the width/height_before_scaler properties are set) and use the scaler. */
@@ -1065,13 +1058,13 @@ gst_framebuffersink_caps_set_preferences (GstFramebufferSink *framebuffersink, G
 
   /* Honour video size requests if the preserve_par property is not set; */
   /* otherwise set the allowable range up to the screen size. */
-  if ((!framebuffersink->preserve_par || no_par) && framebuffersink->requested_video_width != 0)
+  if ((!framebuffersink->preserve_par || fix_width_if_possible) && framebuffersink->requested_video_width != 0)
     gst_caps_set_simple(caps,
         "width", G_TYPE_INT, framebuffersink->requested_video_width, NULL);
   else
     gst_caps_set_simple (caps, "width", GST_TYPE_INT_RANGE, 1,
        GST_VIDEO_INFO_WIDTH (&framebuffersink->screen_info), NULL);
-  if ((!framebuffersink->preserve_par || no_par) && framebuffersink->requested_video_height != 0)
+  if ((!framebuffersink->preserve_par || fix_width_if_possible) && framebuffersink->requested_video_height != 0)
     gst_caps_set_simple(caps,
         "height", G_TYPE_INT, framebuffersink->requested_video_height, NULL);
   else
@@ -1114,7 +1107,10 @@ static GstCaps *gst_framebuffersink_get_default_caps (GstFramebufferSink *frameb
   }
 
   framebuffer_caps = gst_caps_new_simple ("video/x-raw", "format", G_TYPE_STRING,
-    gst_video_format_to_string (GST_VIDEO_INFO_FORMAT (&framebuffersink->screen_info)), NULL);
+      gst_video_format_to_string (GST_VIDEO_INFO_FORMAT (&framebuffersink->screen_info)),
+      "interlace-mode", G_TYPE_STRING, "progressive",
+      "pixel-aspect-ratio", GST_TYPE_FRACTION_RANGE, 1, G_MAXINT, G_MAXINT, 1,
+      NULL);
   gst_caps_append(caps, framebuffer_caps);
 
   return caps;
@@ -1141,7 +1137,7 @@ static GstVideoFormat gst_framebuffersink_get_preferred_video_format_from_caps (
     preferred_overlay_format_from_property = gst_video_format_from_string (
         framebuffersink->preferred_overlay_format_str);
     if (preferred_overlay_format_from_property == GST_VIDEO_FORMAT_UNKNOWN)
-      GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink,
+      GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
           "Unknown video format in overlay-format property");
   }
   ncaps = gst_caps_copy (caps);
@@ -1178,10 +1174,145 @@ static GstVideoFormat gst_framebuffersink_get_preferred_video_format_from_caps (
   return best_format;
 }
 
-/* Get caps returns caps modified with specific user settings. */
+/* get_caps is called by GstBaseSink for two purposes:
+   1. When filter is not NULL, it is a GST_QUERY_CAPS query.
+      The function should suggest caps based on filter.
+      It is allowed that the the suggested caps are not a subset of filter.
+   2. When filter is NULL, it is a GST_QUERY_ACCEPT_CAPS query.
+      The function should return the allowed caps. GstBaseSink actually
+      hides the specific caps from the upstream query. */
 
 static GstCaps *
 gst_framebuffersink_get_caps (GstBaseSink * sink, GstCaps * filter)
+{
+  GstFramebufferSink *framebuffersink = GST_FRAMEBUFFERSINK (sink);
+  GstCaps *caps;
+  int i;
+  int w, h;
+  int par_n, par_d;
+  int n;
+  const char *format_str = NULL;
+  GstVideoFormat format;
+
+  GST_DEBUG_OBJECT (framebuffersink, "get_caps");
+
+  GST_OBJECT_LOCK (framebuffersink);
+
+  GST_LOG_OBJECT (framebuffersink, "get_caps: filter caps: %" GST_PTR_FORMAT "\n", filter);
+
+  /* If the screen info hasn't been initialized yet, return the template caps. */
+  if (GST_VIDEO_INFO_FORMAT (&framebuffersink->screen_info) == GST_VIDEO_FORMAT_UNKNOWN) {
+    caps = gst_static_pad_template_get_caps (&gst_framebuffersink_sink_template);
+    if (filter) {
+      GstCaps *intersection = gst_caps_intersect_full (filter, caps,
+          GST_CAPS_INTERSECT_FIRST);
+      gst_caps_unref (caps);
+      caps = intersection;
+    }
+    goto done_no_store;
+  }
+
+  /* When filter is not NULL (CAPS query), and have already stored the caps, */
+  /* return the stored caps. */
+  if (filter != NULL && framebuffersink->caps) {
+    GST_ERROR_OBJECT (framebuffersink, "get_caps called after dimensions adjusted");
+    caps = gst_caps_ref (framebuffersink->caps);
+    goto done_no_store;
+  }
+
+  /* Generate default caps for the screen. */
+  caps = gst_framebuffersink_get_default_caps(framebuffersink);
+  if (caps == NULL)
+    goto done_no_store;
+  gst_framebuffersink_caps_set_preferences(framebuffersink, caps, TRUE);
+
+  /* For an ACCEPT_CAPS query, return the default caps for the screen. */
+  if (filter == NULL)
+    goto done_no_store;
+
+  /* Check whether upstream is reporting video dimensions and par. */
+  n = gst_caps_get_size (filter);
+  w = 0;
+  h = 0;
+  par_n = 0;
+  par_d = 0;
+  for (i = 0; i < n; i++) {
+    const gchar *fs;
+    GstStructure *str = gst_caps_get_structure (filter, i);
+    gst_structure_get_int (str, "width", &w);
+    gst_structure_get_int (str, "height", &h);
+    if (gst_structure_has_field (str, "pixel-aspect-ratio")) {
+      gst_structure_get_fraction (str, "pixel-aspect-ratio", &par_n, &par_d);
+    }
+    fs = gst_structure_get_string (str, "format");
+    if (fs != NULL && format_str == NULL)
+      format_str = fs;
+  }
+
+  /* Wait until upstream reports the video dimensions. */
+  if (w == 0 || h == 0) {
+    /* Upstream has not yet confirmed a video size */
+    /* Return the intersection of the current caps with the filter caps. */
+    GstCaps *icaps;
+    icaps = gst_caps_intersect_full (filter, caps, GST_CAPS_INTERSECT_FIRST);
+    gst_caps_unref (caps);
+    caps = icaps;
+    goto done_no_store;
+  }
+
+  /* Upstream has confirmed a video size */
+
+  /* Get the video format from caps that is our preferred video */
+  /* format (supported by overlay). */
+  format = gst_framebuffersink_get_preferred_video_format_from_caps(
+      framebuffersink, caps);
+  if (gst_framebuffersink_video_format_supported_by_overlay (framebuffersink, format)) {
+    /* Set the preferred format. */
+    gst_caps_set_simple(caps,
+        "format", G_TYPE_STRING, gst_video_format_to_string (format), NULL);
+  }
+  else
+    /* Set the screen framebuffer format. */
+    gst_caps_set_simple(caps,
+        "format", G_TYPE_STRING, gst_video_format_to_string (GST_VIDEO_INFO_FORMAT (
+        &framebuffersink->screen_info)), NULL);
+
+  caps = gst_caps_simplify (caps);
+
+  framebuffersink->adjusted_dimensions = TRUE;
+  framebuffersink->adjusted_width = w;
+  framebuffersink->adjusted_height = h;
+  if (framebuffersink->requested_video_width != 0)
+    framebuffersink->adjusted_width = framebuffersink->requested_video_width;
+  if (framebuffersink->requested_video_height != 0)
+    framebuffersink->adjusted_height = framebuffersink->requested_video_height;
+
+  /* Return the intersection of the current caps with the filter caps. */
+  if (filter != NULL) {
+    GstCaps *icaps;
+
+    icaps = gst_caps_intersect_full (filter, caps, GST_CAPS_INTERSECT_FIRST);
+    gst_caps_unref (caps);
+    caps = icaps;
+  }
+
+  /* Store the updated caps. */
+  if (framebuffersink->have_caps)
+    gst_caps_unref (framebuffersink->caps);
+  framebuffersink->have_caps = TRUE;
+  framebuffersink->caps = gst_caps_ref (caps);
+
+done_no_store:
+
+  GST_LOG_OBJECT (framebuffersink, "get_caps: returned caps: %" GST_PTR_FORMAT "\n", caps);
+
+  GST_OBJECT_UNLOCK (framebuffersink);
+
+  return caps;
+}
+
+static GstCaps *
+gst_framebuffersink_get_caps_old (GstBaseSink * sink, GstCaps * filter)
 {
   GstFramebufferSink *framebuffersink = GST_FRAMEBUFFERSINK (sink);
   GstCaps *caps;
@@ -1195,28 +1326,34 @@ gst_framebuffersink_get_caps (GstBaseSink * sink, GstCaps * filter)
 
   GST_DEBUG_OBJECT (framebuffersink, "get_caps");
 
-#ifdef EXTRA_DEBUG
-  if (!framebuffersink->silent)
-    g_print ("get_caps: filter caps: %" GST_PTR_FORMAT "\n", filter);
-#endif
+  GST_OBJECT_LOCK (framebuffersink);
+
+  GST_LOG_OBJECT (framebuffersink, "get_caps: filter caps: %" GST_PTR_FORMAT "\n", filter);
 
   /* If the screen info hasn't been initialized yet, return the template caps. */
   if (GST_VIDEO_INFO_FORMAT (&framebuffersink->screen_info) == GST_VIDEO_FORMAT_UNKNOWN) {
-    caps = gst_caps_ref (gst_static_pad_template_get_caps (&gst_framebuffersink_sink_template));
-    return caps;
+    caps = gst_static_pad_template_get_caps (&gst_framebuffersink_sink_template);
+    if (filter) {
+      GstCaps *intersection = gst_caps_intersect_full (filter, caps,
+          GST_CAPS_INTERSECT_FIRST);
+      gst_caps_unref (caps);
+      caps = intersection;
+    }
+    goto done_no_store;
   }
 
-  /* Return the current stored caps when filter is NULL and */
-  /* we have stored caps. */
+#if 0
+  /* When filter is NULL (ACCEPT_CAPS query) and we have stored caps. */
   if (filter == NULL && framebuffersink->have_caps) {
     caps = gst_caps_ref (framebuffersink->caps);
     goto done_no_store;
   }
+#endif
 
-  if (framebuffersink->adjusted_dimensions) {
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "get_caps called after dimensions adjusted");
-//    g_print ("get_caps: filter caps: %" GST_PTR_FORMAT "\n", filter);
-//    g_print ("get_caps: stored caps: %" GST_PTR_FORMAT "\n", framebuffersink->caps);
+  /* When filter is not NULL (CAPS query), and have already set adjusted dimensions, */
+  /* return the stored caps. */
+  if (filter != NULL && framebuffersink->adjusted_dimensions) {
+    GST_WARNING_OBJECT (framebuffersink, "get_caps called after dimensions adjusted");
     caps = gst_caps_ref (framebuffersink->caps);
     goto done_no_store;
   }
@@ -1245,20 +1382,22 @@ gst_framebuffersink_get_caps (GstBaseSink * sink, GstCaps * filter)
       format_str = fs;
   }
 
-  /* Set the caps to the stored ones if we have them, otherwise generate default caps. */
-  if (framebuffersink->have_caps)
+  /* For a CAPS query, set the caps to the stored ones if we have them, otherwise */
+  /* generate default caps. */
+  if (filter != NULL && framebuffersink->have_caps)
     caps = gst_caps_ref (framebuffersink->caps);
   else {
     caps = gst_framebuffersink_get_default_caps(framebuffersink);
     if (caps == NULL)
-      return NULL;
+      goto done_no_store;
     if (filter == NULL)
        no_par = FALSE;
     gst_framebuffersink_caps_set_preferences(framebuffersink, caps, no_par);
   }
 
+  /* For an ACCEPT query, return the generated default caps. */
   if (filter == NULL)
-    goto done_no_intersect;
+    goto done_no_store;
 
   /* Wait until upstream reports the video dimensions. */
   if (w == 0 || h == 0)
@@ -1339,7 +1478,7 @@ gst_framebuffersink_get_caps (GstBaseSink * sink, GstCaps * filter)
           if (adjusted_aspect) {
             sprintf(s, "Preserve aspect ratio: Adjusted output dimensions to %d x %d",
                 output_width, output_height);
-            GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, s);
+            GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, s);
           }
 
           framebuffersink->adjusted_dimensions = TRUE;
@@ -1415,13 +1554,11 @@ done_no_intersect:
 
 done_no_store:
 
-#ifdef EXTRA_DEBUG
-  if (!framebuffersink->silent)
-    g_print ("get_caps: returned caps: %" GST_PTR_FORMAT "\n", caps);
-#endif
+  GST_LOG_OBJECT (framebuffersink, "get_caps: returned caps: %" GST_PTR_FORMAT "\n", caps);
+
+  GST_OBJECT_UNLOCK (framebuffersink);
 
   return caps;
-
 }
 
 
@@ -1489,13 +1626,13 @@ GstVideoInfo *info) {
 
   g_sprintf(s, "Succesfully allocated buffer pool (frame size %zd, %d buffers)",
       info->size, n);
-  GST_FRAMEBUFFERSINK_INFO_OBJECT(framebuffersink, s);
+  GST_FRAMEBUFFERSINK_MESSAGE_OBJECT(framebuffersink, s);
 
 #if 0
   if (!gst_buffer_pool_set_active(framebuffersink->pool, TRUE))
    goto activation_failed;
 
-  GST_FRAMEBUFFERSINK_INFO_OBJECT(framebuffersink, "Succesfully activated buffer pool");
+  GST_FRAMEBUFFERSINK_MESSAGE_OBJECT(framebuffersink, "Succesfully activated buffer pool");
 #endif
 
   return newpool;
@@ -1527,8 +1664,9 @@ gst_framebuffersink_calculate_plane_widths(GstFramebufferSink *framebuffersink, 
     int plane = GST_VIDEO_INFO_COMP_PLANE(info, i);
     framebuffersink->source_video_width_in_bytes[plane] = GST_VIDEO_FORMAT_INFO_SCALE_WIDTH (
         info->finfo, i, GST_VIDEO_INFO_WIDTH(info)) * GST_VIDEO_INFO_COMP_PSTRIDE(info, i);
-//    g_print("component %d, plane %d, pixel stride %d\n", i, plane,
-//        GST_VIDEO_INFO_COMP_PSTRIDE(info, i));
+    GST_LOG_OBJECT (framebuffersink,
+        "calculate_plane_widths: component %d, plane %d, pixel stride %d\n", i, plane,
+        GST_VIDEO_INFO_COMP_PSTRIDE(info, i));
   }
 }
 
@@ -1546,7 +1684,7 @@ gboolean set_overlay_alignment)
     int stride = GST_VIDEO_INFO_PLANE_STRIDE(info, i);
     int stride_aligned;
     if ((stride & framebuffersink->overlay_scanline_alignment) != 0) {
-      GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink,
+      GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
           "Video scanline alignment does not meet hardware overlay restrictions (stride doesn't match)");
       return FALSE;
     }
@@ -1554,14 +1692,14 @@ gboolean set_overlay_alignment)
     if (framebuffersink->overlay_scanline_alignment_is_fixed &&
         stride_aligned != ALIGNMENT_GET_ALIGNED(framebuffersink->source_video_width_in_bytes[i],
         framebuffersink->overlay_scanline_alignment)) {
-      GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink,
+      GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
           "Video scanline alignment does not meet hardware overlay restrictions (video alignment "
           "too wide)");
       return FALSE;
     }
     offset = GST_VIDEO_INFO_PLANE_OFFSET(info, i);
     if ((offset & framebuffersink->overlay_plane_alignment) != 0) {
-      GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink,
+      GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
           "Video plane alignment does not meet hardware overlay restrictions");
       return FALSE;
     }
@@ -1616,12 +1754,11 @@ gst_framebuffersink_set_caps (GstBaseSink * sink, GstCaps * caps)
     goto invalid_format;
 
   if (gst_video_info_is_equal(&info, &framebuffersink->info)) {
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "set_caps called with same caps");
+    GST_WARNING_OBJECT (framebuffersink, "set_caps called with same caps");
     return TRUE;
    }
 
-  if (!framebuffersink->silent)
-    g_print ("Negotiated caps: %" GST_PTR_FORMAT "\n", caps);
+   GST_INFO_OBJECT (framebuffersink, "Negotiated caps: %" GST_PTR_FORMAT "\n", caps);
 
   /* Set the video parameters. */
   framebuffersink->fps_n = info.fps_n;
@@ -1724,7 +1861,7 @@ gst_framebuffersink_set_caps (GstBaseSink * sink, GstCaps * caps)
             /* Use buffer pool. */
             framebuffersink->pool = pool;
             if (!framebuffersink->silent)
-              GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink,
+              GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
                 "Using custom buffer pool (streaming directly to video memory)");
             goto success_overlay;
           }
@@ -1732,9 +1869,9 @@ gst_framebuffersink_set_caps (GstBaseSink * sink, GstCaps * caps)
         framebuffersink->use_buffer_pool = FALSE;
         if (!framebuffersink->silent) {
           if (!framebuffersink->overlay_alignment_is_native)
-            GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink,
+            GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
                 "Alignment restrictions make overlay buffer-pool mode impossible for this video size");
-          GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "Falling back to non buffer-pool mode");
+          GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, "Falling back to non buffer-pool mode");
         }
       }
       /* Not using buffer pool. Using a lot of off-screen buffers may not help. */
@@ -1745,7 +1882,7 @@ gst_framebuffersink_set_caps (GstBaseSink * sink, GstCaps * caps)
   }
 
   if (framebuffersink->use_hardware_overlay) {
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "Disabling hardware overlay");
+    GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, "Disabling hardware overlay");
     framebuffersink->use_hardware_overlay = FALSE;
   }
 
@@ -1759,13 +1896,13 @@ reconfigure:
   /* new buffer pool. */
   if (framebuffersink->use_buffer_pool &&
   framebuffersink->framebuffer_video_width_in_bytes != GST_VIDEO_INFO_COMP_STRIDE (&framebuffersink->screen_info, 0)) {
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "Cannot use buffer pool in video "
+    GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, "Cannot use buffer pool in video "
         "memory because video width is not equal to the configured framebuffer "
         "width");
     framebuffersink->use_buffer_pool = FALSE;
   }
   if (framebuffersink->use_buffer_pool && framebuffersink->max_framebuffers < 2) {
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink,
+    GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
         "Not enough framebuffer memory to use a buffer pool (need at least two framebuffers)");
      framebuffersink->use_buffer_pool = FALSE;
   }
@@ -1787,7 +1924,7 @@ reconfigure:
       char s[80];
       g_sprintf (s, "Using %d framebuffers for page flipping",
           framebuffersink->nu_screens_used);
-      GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, s);
+      GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, s);
     }
   }
   if (framebuffersink->use_buffer_pool) {
@@ -1796,13 +1933,13 @@ reconfigure:
     if (pool) {
       framebuffersink->pool = pool;
       if (!framebuffersink->silent)
-         GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink,
+         GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
              "Using custom buffer pool (streaming directly to video memory)");
       goto success;
     }
     framebuffersink->use_buffer_pool = FALSE;
     if (!framebuffersink->silent)
-      GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "Falling back to non buffer-pool mode");
+      GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, "Falling back to non buffer-pool mode");
     goto reconfigure;
   }
 
@@ -1810,7 +1947,7 @@ success:
 
   if (!framebuffersink->use_buffer_pool) {
     gchar *s = g_strdup_printf ("Allocating %d screen buffers", framebuffersink->nu_screens_used);
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, s);
+    GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, s);
     g_free (s);
     framebuffersink->screens = g_slice_alloc (sizeof (GstMemory *) * framebuffersink->nu_screens_used);
     for (i = 0; i < framebuffersink->nu_screens_used; i++) {
@@ -1819,7 +1956,7 @@ success:
         GST_VIDEO_INFO_COMP_STRIDE (&framebuffersink->screen_info, 0), NULL);
       if (framebuffersink->screens[i] == NULL) {
         s = g_strdup_printf ("Could only allocate %d screen buffers", i);
-        GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, s);
+        GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, s);
         g_free (s);
         framebuffersink->nu_screens_used = i;
         break;
@@ -1866,7 +2003,7 @@ success_overlay:
     char s[128];
     sprintf(s, "Using one framebuffer plus %d overlays in video memory",
         framebuffersink->nu_overlays_used);
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, s);
+    GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, s);
   }
   goto finish;
 
@@ -1911,7 +2048,7 @@ gst_framebuffersink_stop (GstBaseSink * sink)
       framebuffersink->stats_overlay_frames_system_memory,
       framebuffersink->stats_video_frames_video_memory +
       framebuffersink->stats_overlay_frames_video_memory);
-  GST_FRAMEBUFFERSINK_INFO_OBJECT(framebuffersink, s);
+  GST_FRAMEBUFFERSINK_MESSAGE_OBJECT(framebuffersink, s);
 
   klass->close_hardware (framebuffersink);
 
@@ -1993,13 +2130,7 @@ GstBuffer * buf)
   if (gst_framebuffersink_is_video_memory (framebuffersink, mem)) {
     /* This a video memory buffer. */
 
-#if 0
-    {
-    char s[80];
-    g_sprintf(s, "Video memory buffer encountered (%p)", (guintptr) framebuffer_address);
-    GST_FRAMEBUFFERSINK_INFO_OBJECT(framebuffersink, s);
-    }
-#endif
+    GST_LOG_OBJECT (framebuffersink, "Video memory buffer encountered");
 
     gst_framebuffersink_put_image_pan(framebuffersink, mem);
 
@@ -2010,12 +2141,15 @@ GstBuffer * buf)
     return GST_FLOW_OK;
   } else {
     /* This is a normal memory buffer (system memory). */
-#if 0
-    GST_FRAMEBUFFERSINK_INFO_OBJECT(framebuffersink, "Non-video memory buffer encountered");
-#endif
+
+    GST_LOG_OBJECT (framebuffersink, "Non-video memory buffer encountered");
+
     gst_memory_unref(mem);
 
-    return gst_framebuffersink_show_frame_memcpy(framebuffersink, buf);
+    GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
+        "Unexpected system memory buffer provided in buffer-pool mode");
+
+    return GST_FLOW_ERROR;
   }
 
 invalid_memory:
@@ -2038,14 +2172,8 @@ GstBuffer * buf)
   if (gst_framebuffersink_is_video_memory (framebuffersink, mem)) {
     /* This a video memory buffer. */
 
-#if 0
-    {
-    char s[80];
-    g_sprintf(s, "Video memory overlay buffer encountered (%p), mem = %p",
-        (guintptr) framebuffer_address, mem);
-    GST_FRAMEBUFFERSINK_INFO_OBJECT(framebuffersink, s);
-    }
-#endif
+    GST_LOG_OBJECT (framebuffersink, "Video memory overlay buffer encountered, mem = %p",
+        mem);
 
     /* Wait for vsync before changing the overlay address. */
     if (framebuffersink->vsync)
@@ -2061,14 +2189,8 @@ GstBuffer * buf)
     /* This is a normal memory buffer (system memory), but it is */
     /* overlay data. */
 
-#if 0
-    {
-    char s[80];
-    g_sprintf(s, "Non-video memory overlay buffer encountered, mem = %p",
+    GST_LOG_OBJECT (framebuffersink, "Non-video memory overlay buffer encountered, mem = %p",
         mem);
-    GST_FRAMEBUFFERSINK_INFO_OBJECT(framebuffersink, s);
-    }
-#endif
 
     gst_memory_map(mem, &mapinfo, GST_MAP_READ);
 
@@ -2131,7 +2253,7 @@ GstQuery *query, GstBufferPool *pool, GstCaps *caps, GstVideoInfo *info)
     gsize size;
     int n;
 
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "Providing video memory buffer pool");
+    GST_INFO_OBJECT (framebuffersink, "Providing video memory buffer pool");
 
     size = info->size;
     n = framebuffersink->nu_screens_used;
@@ -2168,17 +2290,11 @@ GstQuery *query, GstBufferPool *pool, GstCaps *caps, GstVideoInfo *info)
 
     gst_object_unref (pool);
 
-    {
-      char s[80];
-      sprintf(s, "propose_allocation: size = %.2lf MB, %d buffers",
-          (double) size / (1024 * 1024), n);
-      GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, s);
-    }
+    GST_INFO_OBJECT (framebuffersink, "propose_allocation: size = %.2lf MB, %d buffers",
+        (double) size / (1024 * 1024), n);
 
-#ifdef EXTRA_DEBUG
-    GST_FRAMEBUFFERSINK_INFO_OBJECT(framebuffersink,
-      "propose_allocation: provide our video memory buffer pool");
-#endif
+    GST_INFO_OBJECT (framebuffersink,
+        "propose_allocation: provide our video memory buffer pool");
 
   return TRUE;
 }
@@ -2198,15 +2314,12 @@ gst_framebuffersink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
   guint size;
   gboolean need_pool;
 
-  GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "propose_allocation called");
+  GST_INFO_OBJECT (framebuffersink, "propose_allocation called");
 
   gst_query_parse_allocation (query, &caps, &need_pool);
 
   if (caps == NULL)
     goto no_caps;
-
-//  if (!framebuffersink->silent) {
-//    g_print ("propose_allocation: caps: %" GST_PTR_FORMAT "\n", caps);
 
   if (!gst_video_info_from_caps (&info, caps))
     goto invalid_caps;
@@ -2219,13 +2332,8 @@ gst_framebuffersink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
 #ifdef USE_SAME_POOL
   if (pool)
     if (gst_buffer_pool_is_active (pool)) {
-      int n;
-      GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "Providing query with already activated pool");
-      n = framebuffersink->nu_screens_used;
-      if (framebuffersink->use_hardware_overlay)
-        n = framebuffersink->nu_overlays_used;
-      gst_query_add_allocation_pool (query, pool, info.size, n, n);
-      return TRUE;
+      GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, "Cannot provide query with already activated pool");
+      return FALSE;
     }
 #endif
 
@@ -2233,7 +2341,7 @@ gst_framebuffersink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
   /* we can't easily provide regular system memory buffers because */
   /* due to the difficulty of handling page flips correctly. */
   if (framebuffersink->use_buffer_pool && pool == NULL) {
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink,
+    GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
         "propose_allocation: Already provided video memory buffer pool");
   }
 
@@ -2241,12 +2349,12 @@ gst_framebuffersink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
     GstCaps *pcaps;
 
     /* We have a pool, check the caps. */
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "check existing pool caps");
+    GST_LOG_OBJECT (framebuffersink, "check existing pool caps");
     config = gst_buffer_pool_get_config (pool);
     gst_buffer_pool_config_get_params (config, &pcaps, &size, NULL, NULL);
 
     if (!gst_caps_is_equal (caps, pcaps)) {
-      GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "pool has different caps");
+      GST_LOG_OBJECT (framebuffersink, "pool has different caps");
       /* Different caps, we can't use our pool. */
       gst_object_unref (pool);
       pool = NULL;
@@ -2288,7 +2396,7 @@ gst_framebuffersink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
     /* Provide a regular system memory buffer pool. */
     GstAllocator *allocator;
 
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "create new system memory pool");
+    GST_LOG_OBJECT (framebuffersink, "create new system memory pool");
     pool = gst_video_buffer_pool_new ();
 
     size = info.size;
@@ -2316,17 +2424,17 @@ end:
   /* ERRORS */
 no_caps:
   {
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "no caps specified");
+    GST_ERROR_OBJECT (framebuffersink, "no caps specified");
     return FALSE;
   }
 invalid_caps:
   {
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "invalid caps specified");
+    GST_ERROR_OBJECT (framebuffersink, "invalid caps specified");
     return FALSE;
   }
 config_failed:
   {
-    GST_FRAMEBUFFERSINK_INFO_OBJECT (framebuffersink, "failed setting config");
+    GST_ERROR_OBJECT (framebuffersink, "failed setting config");
     gst_object_unref (pool);
     return FALSE;
   }

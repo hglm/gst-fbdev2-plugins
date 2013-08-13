@@ -99,12 +99,12 @@
 GST_DEBUG_CATEGORY_STATIC (gst_fbdev2sink_debug_category);
 #define GST_CAT_DEFAULT gst_fbdev2sink_debug_category
 
-/* Inline function to produce both normal message and debug info. */
-static inline void GST_FBDEV2SINK_INFO_OBJECT (GstFbdev2sink *fbdev2sink,
+static inline void GST_FBDEV2SINK_MESSAGE_OBJECT (GstFbdev2sink *fbdev2sink,
 const gchar *message) {
   if (!fbdev2sink->fbdevframebuffersink.framebuffersink.silent)
-      g_print ("%s.\n", message);
-  GST_INFO_OBJECT (fbdev2sink, message);
+    g_print ("%s.\n", message);
+  else
+    GST_INFO_OBJECT (fbdev2sink, message);
 }
 
 #define GST_FBDEV2SINK_TEMPLATE_CAPS \

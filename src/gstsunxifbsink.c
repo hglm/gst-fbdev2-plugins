@@ -126,11 +126,12 @@
 GST_DEBUG_CATEGORY_STATIC (gst_sunxifbsink_debug_category);
 #define GST_CAT_DEFAULT gst_sunxifbsink_debug_category
 
-/* Inline function to produce both normal message and debug info. */
-static inline void GST_SUNXIFBSINK_INFO_OBJECT (GstSunxifbsink * sunxifbsink,
+static inline void GST_SUNXIFBSINK_MESSAGE_OBJECT (GstSunxifbsink * sunxifbsink,
 const gchar *message) {
-  if (!sunxifbsink->fbdevframebuffersink.framebuffersink.silent) g_print ("%s.\n", message);
-  GST_INFO_OBJECT (sunxifbsink, message);
+  if (!sunxifbsink->fbdevframebuffersink.framebuffersink.silent)
+    g_print ("%s.\n", message);
+  else
+    GST_INFO_OBJECT (sunxifbsink, message);
 }
 
 /* Class function prototypes. */
@@ -261,7 +262,7 @@ gsize *video_memory_size, gsize *pannable_video_memory_size) {
   version = ioctl (sunxifbsink->fd_disp, DISP_CMD_VERSION, &tmp);
   if (version < 0) {
     close(sunxifbsink->fd_disp);
-    GST_SUNXIFBSINK_INFO_OBJECT (sunxifbsink,
+    GST_SUNXIFBSINK_MESSAGE_OBJECT (sunxifbsink,
         "Could not open sunxi disp controller");
     return TRUE;
   }
@@ -281,7 +282,7 @@ gsize *video_memory_size, gsize *pannable_video_memory_size) {
   sunxifbsink->layer_is_visible = FALSE;
 
   sunxifbsink->hardware_overlay_available = TRUE;
-  GST_SUNXIFBSINK_INFO_OBJECT (sunxifbsink, "Hardware overlay available");
+  GST_SUNXIFBSINK_MESSAGE_OBJECT (sunxifbsink, "Hardware overlay available");
 
   return TRUE;
 }
@@ -556,11 +557,7 @@ gst_sunxifbsink_show_overlay (GstFramebufferSink *framebuffersink, GstMemory *me
   gst_memory_map(memory, &mapinfo, 0);
   framebuffer_offset = mapinfo.data - fbdevframebuffersink->framebuffer;
 
-#if 0
-  char s[80];
-  sprintf(s, "Show overlay called (offset = 0x%08X)", framebuffer_offset);
-  GST_SUNXIFBSINK_INFO_OBJECT(sunxifbsink, s);
-#endif
+  GST_LOG_OBJECT (sunxifbsink, "Show overlay called (offset = 0x%08X)", framebuffer_offset);
 
   res = GST_FLOW_ERROR;
   if (sunxifbsink->overlay_format == GST_VIDEO_FORMAT_I420 ||

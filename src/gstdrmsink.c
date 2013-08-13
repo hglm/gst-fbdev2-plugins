@@ -128,11 +128,14 @@
 GST_DEBUG_CATEGORY_STATIC (gst_drmsink_debug_category);
 #define GST_CAT_DEFAULT gst_drmsink_debug_category
 
-/* Inline function to produce both normal message and debug info. */
-static inline void GST_DRMSINK_INFO_OBJECT (GstDrmsink *drmsink,
+/* Inline function to produce informational output if silent property is not set; */
+/* if silent property is enabled only debugging info is produced. */
+static inline void GST_DRMSINK_MESSAGE_OBJECT (GstDrmsink *drmsink,
 const gchar *message) {
-  if (!drmsink->framebuffersink.silent) g_print ("%s.\n", message);
-  GST_INFO_OBJECT (drmsink, message);
+  if (!drmsink->framebuffersink.silent)
+    g_print ("%s.\n", message);
+  else
+    GST_INFO_OBJECT (drmsink, message);
 }
 
 #define DEFAULT_DRM_DEVICE "/dev/dri/card0"
@@ -301,14 +304,12 @@ gst_drmsink_find_mode_and_plane (GstDrmsink *drmsink, GstVideoRectangle *dim)
   if (connector->count_modes == 0)
     goto error_no_mode;
 
-#if 0
   g_sprintf(s, "Connected encoder: id = %u", connector->encoder_id);
-  GST_DRMSINK_INFO_OBJECT (drmsink, s);
+  GST_INFO_OBJECT (drmsink, s);
   for (i = 0; i < connector->count_encoders; i++) {
     g_sprintf(s, "Available encoder: id = %u", connector->encoders[i]);
-    GST_DRMSINK_INFO_OBJECT (drmsink, s);
+    GST_INFO_OBJECT (drmsink, s);
   }
-#endif
 
   /* Now get the encoder */
   encoder = drmModeGetEncoder (drmsink->fd, connector->encoder_id);
@@ -323,7 +324,7 @@ gst_drmsink_find_mode_and_plane (GstDrmsink *drmsink, GstVideoRectangle *dim)
   dim->x = dim->y = 0;
   dim->w = mode->hdisplay;
   dim->h = mode->vdisplay;
-/*   GST_INFO_OBJECT (drmsink, "connector mode = %dx%d", dim->w, dim->h); */
+  GST_INFO_OBJECT (drmsink, "connector mode = %dx%d", dim->w, dim->h);
 
   drmsink->crtc_id = encoder->crtc_id;
 
@@ -437,7 +438,7 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
   gchar *s;
 
   if (!drmAvailable()) {
-    GST_DRMSINK_INFO_OBJECT (drmsink, "No kernel DRM driver loaded");
+    GST_DRMSINK_MESSAGE_OBJECT (drmsink, "No kernel DRM driver loaded");
     return FALSE;
   }
 
@@ -445,14 +446,14 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
   drmsink->fd = open (framebuffersink->device, O_RDWR | O_CLOEXEC);
   if (drmsink->fd < 0) {
     s = g_strdup_printf ("Cannot open DRM device %s", framebuffersink->device);
-    GST_DRMSINK_INFO_OBJECT (drmsink, s);
+    GST_DRMSINK_MESSAGE_OBJECT (drmsink, s);
     g_free (s);
     return FALSE;
   }
 
   res = drmGetCap (drmsink->fd, DRM_CAP_DUMB_BUFFER, &has_dumb_buffers);
   if (res < 0 || !has_dumb_buffers) {
-    GST_DRMSINK_INFO_OBJECT (drmsink, "DRM device does not support dumb buffers");
+    GST_DRMSINK_MESSAGE_OBJECT (drmsink, "DRM device does not support dumb buffers");
     return FALSE;
   }
 
@@ -468,12 +469,12 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
     s = g_strdup_printf ("DRM connector found, id = %d, type = %d, connected = %d",
         connector->connector_id, connector->connector_type,
         connector->connection == DRM_MODE_CONNECTED);
-    GST_DRMSINK_INFO_OBJECT (drmsink, s);
+    GST_INFO_OBJECT (drmsink, s);
     g_free (s);
 
     for (j = 0; j < connector->count_modes; j++) {
       s = g_strdup_printf ("Supported mode %s", connector->modes[j].name);
-      GST_DRMSINK_INFO_OBJECT (drmsink, s);
+      GST_INFO_OBJECT (drmsink, s);
       g_free (s);
     }
     drmModeFreeConnector(connector);
@@ -494,7 +495,7 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
     }
 
     if (i == drmsink->resources->count_connectors) {
-      GST_DRMSINK_INFO_OBJECT (drmsink, "Specified DRM connector not found");
+      GST_DRMSINK_MESSAGE_OBJECT (drmsink, "Specified DRM connector not found");
       drmModeFreeResources (drmsink->resources);
       return FALSE;
     }
@@ -515,7 +516,7 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
     }
 
     if (i == drmsink->resources->count_connectors) {
-      GST_DRMSINK_INFO_OBJECT (drmsink, "No currently active DRM connector found");
+      GST_DRMSINK_MESSAGE_OBJECT (drmsink, "No currently active DRM connector found");
       drmModeFreeResources (drmsink->resources);
       return FALSE;
     }
@@ -548,7 +549,7 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
 
   ret = kms_create(drmsink->fd, &drmsink->drv);
   if (ret) {
-    GST_DRMSINK_INFO_OBJECT(drmsink, "kms_create() failed");
+    GST_DRMSINK_MESSAGE_OBJECT(drmsink, "kms_create() failed");
     return FALSE;
   }
 #endif
@@ -569,7 +570,7 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
 
   s = g_strdup_printf("Successfully initialized DRM, connector = %d, mode = %dx%d",
       drmsink->connector_id, drmsink->screen_rect.w, drmsink->screen_rect.h);
-  GST_DRMSINK_INFO_OBJECT (drmsink, s);
+  GST_DRMSINK_MESSAGE_OBJECT (drmsink, s);
   g_free (s);
 
   return TRUE;
@@ -605,7 +606,7 @@ gst_drmsink_close_hardware (GstFramebufferSink *framebuffersink) {
 
   gst_drmsink_reset (drmsink);
 
-  GST_DRMSINK_INFO_OBJECT (drmsink, "Closed DRM device");
+  GST_DRMSINK_MESSAGE_OBJECT (drmsink, "Closed DRM device");
 
   return;
 }
@@ -700,7 +701,7 @@ GstAllocationParams *params)
   ret = drmIoctl (drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_CREATE_DUMB,
       &mem->creq);
   if (ret < 0) {
-    g_print ("Creating dumb drm buffer failed.\n");
+    GST_DRMSINK_MESSAGE_OBJECT (drmsink_video_memory_allocator->drmsink, "Creating dumb drm buffer failed");
     g_slice_free (GstDrmSinkVideoMemory, mem);
     GST_OBJECT_UNLOCK (allocator);
     return NULL;
@@ -717,7 +718,8 @@ GstAllocationParams *params)
       mem->creq.pitch, mem->creq.handle, &mem->fb);
   if (ret) {
     /* frame buffer creation failed; see "errno" */
-    g_print ("DRM framebuffer creation failed.\n");
+    GST_DRMSINK_MESSAGE_OBJECT (drmsink_video_memory_allocator->drmsink,
+        "DRM framebuffer creation failed.\n");
     goto fail_destroy;
   }
 
@@ -729,7 +731,8 @@ GstAllocationParams *params)
   ret = drmIoctl (drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_MAP_DUMB,
       &mem->mreq);
   if (ret) {
-    g_print ("DRM buffer preparation failed.\n");
+    GST_DRMSINK_MESSAGE_OBJECT (drmsink_video_memory_allocator->drmsink,
+        "DRM buffer preparation failed.\n");
     drmModeRmFB (drmsink_video_memory_allocator->drmsink->fd, mem->creq.handle);
     goto fail_destroy;
   }
@@ -741,7 +744,8 @@ GstAllocationParams *params)
       drmsink_video_memory_allocator->drmsink->fd, mem->mreq.offset);
   if (mem->map_address == MAP_FAILED) {
     /* memory-mapping failed; see "errno" */
-    g_print ("Memory mapping of DRM buffer failed.\n");
+    GST_DRMSINK_MESSAGE_OBJECT (drmsink_video_memory_allocator->drmsink,
+        "Memory mapping of DRM buffer failed.\n");
     drmModeRmFB (drmsink_video_memory_allocator->drmsink->fd, mem->creq.handle);
     goto fail_destroy;
   }
@@ -752,10 +756,9 @@ GstAllocationParams *params)
 
   drmsink_video_memory_allocator->total_allocated += size;
 
-#if 0
-  g_print ("Allocated video memory buffer of size %zd at %p, align %d, mem = %p\n", size,
-      mem->map_address, align, mem);
-#endif
+  GST_INFO_OBJECT (drmsink_video_memory_allocator->drmsink,
+      "Allocated video memory buffer of size %zd at %p, align %d, mem = %p\n",
+      size, mem->map_address, align, mem);
 
   memset (mem->map_address, 0, size);
 
@@ -779,7 +782,8 @@ gst_drmsink_video_memory_allocator_free (GstAllocator * allocator, GstMemory * m
   GstDrmSinkVideoMemory *vmem = (GstDrmSinkVideoMemory *) mem;
   struct drm_mode_destroy_dumb dreq;
 
-//  g_print("video_memory_allocator_free called, address = %p\n", vmem->data);
+  GST_INFO_OBJECT (drmsink_video_memory_allocator->drmsink,
+      "video_memory_allocator_free called, address = %p\n", vmem->map_address);
 
   drmsink_video_memory_allocator->total_allocated -= mem->size;
 
@@ -795,11 +799,11 @@ gst_drmsink_video_memory_allocator_free (GstAllocator * allocator, GstMemory * m
 static gpointer
 gst_drmsink_video_memory_map (GstDrmSinkVideoMemory * mem, gsize maxsize, GstMapFlags flags)
 {
-//  g_print ("video_memory_map called, mem = %p, maxsize = %d, flags = %d, data = %p\n", mem,
-//      maxsize, flags, mem->map_address);
+  GST_DEBUG ("video_memory_map called, mem = %p, maxsize = %d, flags = %d, data = %p\n", mem,
+      maxsize, flags, mem->map_address);
 
-//  if (flags & GST_MAP_READ)
-//    g_print ("Mapping video memory for reading is slow.\n");
+  if (flags & GST_MAP_READ)
+    GST_DEBUG ("Mapping video memory for reading is slow.\n");
 
   return mem->map_address;
 }
@@ -848,7 +852,7 @@ GstVideoInfo *info, gboolean pannable, gboolean is_overlay)
   str = g_strdup_printf ("Created video memory allocator %s, %dx%d, format %s",
       s, drmsink_video_memory_allocator->w, drmsink_video_memory_allocator->h,
       gst_video_format_to_string (GST_VIDEO_INFO_FORMAT (info)));
-  GST_DRMSINK_INFO_OBJECT (drmsink, str);
+  GST_INFO_OBJECT (drmsink, str);
   g_free (str);
   return GST_ALLOCATOR_CAST (drmsink_video_memory_allocator);
 }
@@ -917,18 +921,14 @@ gst_drmsink_pan_display (GstFramebufferSink *framebuffersink,
   uint32_t connectors[1];
   gchar *s;
 
-#if 0
-  s = g_strdup_printf ("pan_display called, mem = %p, map_address = %p",
+  GST_LOG_OBJECT (framebuffersink, "pan_display called, mem = %p, map_address = %p",
       vmem, vmem->map_address);
-  GST_DRMSINK_INFO_OBJECT (drmsink, s);
-  g_free (s);
-#endif
 
   if (!drmsink->crtc_mode_initialized) {
     connectors[0] = drmsink->connector_id;
     if (drmModeSetCrtc (drmsink->fd, drmsink->crtc_id, vmem->fb,
         0, 0, connectors, 1, &drmsink->mode)) {
-      GST_DRMSINK_INFO_OBJECT (drmsink, "drmModeSetCrtc failed");
+      GST_ERROR_OBJECT (drmsink, "drmModeSetCrtc failed");
       return;
     }
     drmsink->crtc_mode_initialized = TRUE;
@@ -937,7 +937,7 @@ gst_drmsink_pan_display (GstFramebufferSink *framebuffersink,
   gst_drmsink_flush_drm_events (drmsink);
 
   if (drmsink->page_flip_pending) {
-    GST_DRMSINK_INFO_OBJECT (drmsink, "pan_display: previous page flip still pending, skipping");
+    GST_INFO_OBJECT (drmsink, "pan_display: previous page flip still pending, skipping");
     return;
   }
 
@@ -945,7 +945,7 @@ gst_drmsink_pan_display (GstFramebufferSink *framebuffersink,
   drmsink->page_flip_pending = TRUE;
   if (drmModePageFlip (drmsink->fd, drmsink->crtc_id, vmem->fb, DRM_MODE_PAGE_FLIP_EVENT,
       drmsink)) {
-    GST_DRMSINK_INFO_OBJECT (drmsink, "drmModePageFlip failed");
+    GST_ERROR_OBJECT (drmsink, "drmModePageFlip failed");
     return;
   }
 }
@@ -958,7 +958,7 @@ gst_drmsink_wait_for_vsync (GstFramebufferSink *framebuffersink)
   fd_set fds;
   struct timeval tv;
 
-  GST_DRMSINK_INFO_OBJECT (drmsink, "wait_for_vsync called");
+  GST_INFO_OBJECT (drmsink, "wait_for_vsync called");
 
   drmsink->vblank_occurred = FALSE;
   vbl.request.type = DRM_VBLANK_RELATIVE | DRM_VBLANK_EVENT;
