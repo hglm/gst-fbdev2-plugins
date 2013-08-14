@@ -101,9 +101,16 @@ switching consoles helps in this case.
 Run "gst-inspect-1.0 fbdev2sink" for an overview of configurable property
 settings.
 
-Note: Using the fb device requires root priviledges on most systems.
+Note: Using the fb device requires root priviledges on most systems. Also,
+on systems implementing DRM, there's usually only one screen buffer available,
+so page flipping and video memory buffer pools cannot be enabled. Use drmsink
+in this case.
 
 *** Usage (drmsink) ***
+
+I have only tested drmsink from the console with no X server or other DRM
+clients running. Running from within X isn't advisable (it seems to
+produce no errors but no screen output).
 
 By default drmsink will assume there is enough video memory for three screen
 buffers. The video-memory property can be used to set the amount of video

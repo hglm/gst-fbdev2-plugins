@@ -985,6 +985,7 @@ gst_framebuffersink_start (GstBaseSink *sink)
 
   framebuffersink->current_framebuffer_index = 0;
 
+  framebuffersink->nu_screens_used = 0;
   framebuffersink->screens = NULL;
 
   /* Get a screen allocator. */
@@ -994,6 +995,9 @@ gst_framebuffersink_start (GstBaseSink *sink)
   /* Perform benchmarks if requested. */
   if (framebuffersink->benchmark)
     gst_framebuffersink_benchmark (framebuffersink);
+
+  framebuffersink->nu_overlays_used = 0;
+  framebuffersink->overlays = NULL;
 
   /* Reset overlay types. */
   framebuffersink->overlay_formats_supported = gst_framebuffersink_get_supported_overlay_formats (framebuffersink);
@@ -2024,6 +2028,7 @@ gst_framebuffersink_stop (GstBaseSink * sink)
 {
   GstFramebufferSink *framebuffersink = GST_FRAMEBUFFERSINK (sink);
   GstFramebufferSinkClass *klass = GST_FRAMEBUFFERSINK_GET_CLASS (framebuffersink);
+  int i;
   char s[128];
 
   GST_DEBUG_OBJECT (framebuffersink, "stop");
@@ -2039,9 +2044,26 @@ gst_framebuffersink_stop (GstBaseSink * sink)
       framebuffersink->stats_overlay_frames_video_memory);
   GST_FRAMEBUFFERSINK_MESSAGE_OBJECT(framebuffersink, s);
 
-  klass->close_hardware (framebuffersink);
+  /* Free screen buffers, but be careful because in buffer-pool mode,
+     nu_screens_used will be > 0 but screens will be NULL. */
+  if (framebuffersink->screens != NULL)  {
+    for (i = 0; i < framebuffersink->nu_screens_used; i++)
+      gst_allocator_free (framebuffersink->screen_video_memory_allocator,
+          framebuffersink->screens[i]);
+    if (framebuffersink->nu_screens_used > 0)
+      g_slice_free1 (sizeof (GstMemory *) * framebuffersink->nu_screens_used,
+          framebuffersink->screens);
+  }
 
-  g_free (framebuffersink->device);
+  /* Free overlay buffers. */
+  if (framebuffersink->overlays != NULL) {
+    for (i = 0; i < framebuffersink->nu_overlays_used; i++)
+      gst_allocator_free (framebuffersink->overlay_video_memory_allocator,
+          framebuffersink->overlays[i]);
+    if (framebuffersink->nu_overlays_used > 0)
+      g_slice_free1 (sizeof (GstMemory *) * framebuffersink->nu_overlays_used,
+          framebuffersink->overlays);
+  }
 
   if (framebuffersink->use_buffer_pool) {
     if (framebuffersink->pool) {
@@ -2049,10 +2071,10 @@ gst_framebuffersink_stop (GstBaseSink * sink)
       framebuffersink->pool = NULL;
     }
   }
-  if (framebuffersink->nu_overlays_used > 0)
-    g_slice_free1 (sizeof (GstMemory *) * framebuffersink->nu_overlays_used, framebuffersink->overlays);
-  if (framebuffersink->nu_screens_used > 0)
-    g_slice_free1 (sizeof (GstMemory *) * framebuffersink->nu_screens_used, framebuffersink->screens);
+
+  klass->close_hardware (framebuffersink);
+
+  g_free (framebuffersink->device);
 
   return TRUE;
 }
