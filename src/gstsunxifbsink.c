@@ -326,10 +326,10 @@ int *overlay_plane_alignment, gboolean *overlay_scanline_alignment_is_fixed)
 /* framebuffersink->overlay_scanline_stride[i] is the scanline stride in bytes of each plane. */
 /* framebuffersink->videosink.width is the source width. */
 /* framebuffersink->videosink.height is the source height. */
-/* framebuffersink->cx is the destination x coordinate. */
-/* framebuffersink->cy is the destination y coordinate. */
-/* framebuffersink->scaled_width is the destination width. */
-/* framebuffersink->scaled_height is the destination height. */
+/* framebuffersink->video_rectangle.x is the destination x coordinate. */
+/* framebuffersink->video_rectangle.y is the destination y coordinate. */
+/* framebuffersink->video_rectangle.w is the destination width. */
+/* framebuffersink->video_rectangle.h is the destination height. */
 
 static gboolean
 gst_sunxifbsink_prepare_overlay (GstFramebufferSink *framebuffersink, GstVideoFormat format)
@@ -417,10 +417,10 @@ GstVideoFormat format)
     if (ioctl (sunxifbsink->fd_disp, DISP_CMD_LAYER_SET_SRC_WINDOW, tmp) < 0)
         return GST_FLOW_ERROR;
 
-    output_rect.x = framebuffersink->cx;
-    output_rect.y = framebuffersink->cy;
-    output_rect.width = framebuffersink->scaled_width;
-    output_rect.height = framebuffersink->scaled_height;
+    output_rect.x = framebuffersink->video_rectangle.x;
+    output_rect.y = framebuffersink->video_rectangle.y;
+    output_rect.width = framebuffersink->video_rectangle.w;
+    output_rect.height = framebuffersink->video_rectangle.h;
     tmp[0] = sunxifbsink->framebuffer_id;
     tmp[1] = sunxifbsink->layer_id;
     tmp[2] = (uintptr_t)&output_rect;
@@ -478,10 +478,10 @@ GstVideoFormat format)
     if (ioctl (sunxifbsink->fd_disp, DISP_CMD_LAYER_SET_SRC_WINDOW, tmp) < 0)
         return GST_FLOW_ERROR;
 
-    output_rect.x = framebuffersink->cx;
-    output_rect.y = framebuffersink->cy;
-    output_rect.width = framebuffersink->scaled_width;
-    output_rect.height = framebuffersink->scaled_height;
+    output_rect.x = framebuffersink->video_rectangle.x;
+    output_rect.y = framebuffersink->video_rectangle.y;
+    output_rect.width = framebuffersink->video_rectangle.w;
+    output_rect.height = framebuffersink->video_rectangle.h;
     tmp[0] = sunxifbsink->framebuffer_id;
     tmp[1] = sunxifbsink->layer_id;
     tmp[2] = (uintptr_t)&output_rect;
@@ -530,10 +530,10 @@ gst_sunxifbsink_show_overlay_bgrx32 (GstFramebufferSink *framebuffersink, guintp
     if (ioctl (sunxifbsink->fd_disp, DISP_CMD_LAYER_SET_SRC_WINDOW, tmp) < 0)
         return GST_FLOW_ERROR;
 
-    output_rect.x = framebuffersink->cx;
-    output_rect.y = framebuffersink->cy;
-    output_rect.width = framebuffersink->scaled_width;
-    output_rect.height = framebuffersink->scaled_height;
+    output_rect.x = framebuffersink->video_rectangle.x;
+    output_rect.y = framebuffersink->video_rectangle.y;
+    output_rect.width = framebuffersink->video_rectangle.w;
+    output_rect.height = framebuffersink->video_rectangle.h;
     tmp[0] = sunxifbsink->framebuffer_id;
     tmp[1] = sunxifbsink->layer_id;
     tmp[2] = (uintptr_t)&output_rect;

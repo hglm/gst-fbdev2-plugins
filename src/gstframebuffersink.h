@@ -90,16 +90,14 @@ struct _GstFramebufferSink
   GstMemory **overlays;
 
   /* Video information. */
-  GstVideoInfo info;
-  int clipped_height;
-  int framebuffer_video_width_in_bytes;
-  /* Video width in bytes for each plane. */
+  GstVideoInfo video_info;
+  /* Video width in bytes for each plane, calculated from video_info. */
   int source_video_width_in_bytes[4];
-  /* Framerate numerator and denominator */
-  gint fps_n;
-  gint fps_d;
-  /* Centering offsets when playing video. */
-  int cx, cy;
+  /* Size and position of the clipped output window in screen coordinates. */
+  GstVideoRectangle video_rectangle;
+  /* Precalculated video rectangle width * framebuffer bytes per pixel. */
+  int video_rectangle_width_in_bytes;
+
   /* Actual overlay organization in video memory for each plane. */
   int overlay_plane_offset[4];
   int overlay_scanline_stride[4];
@@ -111,9 +109,6 @@ struct _GstFramebufferSink
   GstBufferPool *pool;
   gboolean have_caps;
   GstCaps *caps;
-  gboolean adjusted_dimensions;
-  int adjusted_width;
-  int adjusted_height;
 
   /* Stats. */
   int stats_video_frames_video_memory;

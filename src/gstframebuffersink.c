@@ -87,7 +87,7 @@ static GstVideoSinkClass *parent_class = NULL;
 /* Provide half of the available video memory pool buffers per request. */
 /* #define HALF_POOLS */
 
-/* #define INCLUDE_PRESERVE_PAR_PROPERTY */
+#define INCLUDE_PRESERVE_PAR_PROPERTY
 
 /* Function to produce informational output if silent property is not set; */
 /* if the silent property is set only debugging info is produced. */
@@ -259,8 +259,9 @@ gst_framebuffersink_class_init (GstFramebufferSinkClass* klass)
 #ifdef INCLUDE_PRESERVE_PAR_PROPERTY
   g_object_class_install_property (gobject_class, PROP_PRESERVE_PAR,
     g_param_spec_boolean ("preserve-par", "Preserve pixel aspect ratio",
-			  "Preserve the pixel aspect ratio by adding black boxes if necessary",
-                          FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+			  "Preserve the pixel aspect ratio by adding black boxes if necessary. "
+                          "Only works if hardware scaling can be used.",
+                          TRUE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 #endif
   g_object_class_install_property (gobject_class, PROP_CLEAR,
     g_param_spec_boolean ("clear", "Clear the screen",
@@ -342,9 +343,9 @@ static void
 gst_framebuffersink_init (GstFramebufferSink *framebuffersink) {
   framebuffersink->pool = NULL;
   framebuffersink->have_caps = FALSE;
-  framebuffersink->adjusted_dimensions = FALSE;
   /* This will set the format to GST_VIDEO_FORMAT_UNKNOWN. */
   gst_video_info_init (&framebuffersink->screen_info);
+  gst_video_info_init (&framebuffersink->video_info);
 
   /* Set the initial values of the properties.*/
   framebuffersink->device = NULL;
@@ -363,12 +364,15 @@ gst_framebuffersink_init (GstFramebufferSink *framebuffersink) {
   framebuffersink->flip_buffers = 0;
   framebuffersink->pan_does_vsync = FALSE;
   framebuffersink->use_hardware_overlay = TRUE;
+#ifdef INCLUDE_PRESERVE_PAR_PROPERTY
+  /* When the preserve_par property is available, it will default true. */
   framebuffersink->preserve_par = TRUE;
+#else
+  framebuffersink->preserve_par = FALSE;
+#endif
   framebuffersink->max_video_memory_property = 0;
   framebuffersink->preferred_overlay_format_str = NULL;
   framebuffersink->benchmark = FALSE;
-
-  gst_video_info_init (&framebuffersink->info);
 }
 
 /* Default implementation of hardware open/close functions. */
@@ -618,14 +622,14 @@ gst_framebuffersink_put_image_memcpy (GstFramebufferSink *framebuffersink, uint8
 
   gst_memory_map (framebuffersink->screens[framebuffersink->current_framebuffer_index], &mapinfo, GST_MAP_WRITE);
   dest = mapinfo.data;
-  dest += framebuffersink->cy * GST_VIDEO_INFO_COMP_STRIDE (&framebuffersink->screen_info, 0)
-      + framebuffersink->cx * GST_VIDEO_INFO_COMP_PSTRIDE (&framebuffersink->screen_info, 0);
+  dest += framebuffersink->video_rectangle.y * GST_VIDEO_INFO_COMP_STRIDE (&framebuffersink->screen_info, 0)
+      + framebuffersink->video_rectangle.x * GST_VIDEO_INFO_COMP_PSTRIDE (&framebuffersink->screen_info, 0);
   dest_stride = GST_VIDEO_INFO_COMP_STRIDE (&framebuffersink->screen_info, 0);
-  if (framebuffersink->framebuffer_video_width_in_bytes == dest_stride)
-      memcpy (dest, src, dest_stride * framebuffersink->clipped_height);
+  if (framebuffersink->video_rectangle_width_in_bytes == dest_stride)
+      memcpy (dest, src, dest_stride * framebuffersink->video_rectangle.h);
   else
-    for (i = 0; i < framebuffersink->clipped_height; i++) {
-      memcpy (dest, src, framebuffersink->framebuffer_video_width_in_bytes);
+    for (i = 0; i < framebuffersink->video_rectangle.h; i++) {
+      memcpy (dest, src, framebuffersink->video_rectangle_width_in_bytes);
       src += framebuffersink->source_video_width_in_bytes[0];
       dest += dest_stride;
     }
@@ -643,14 +647,14 @@ gst_framebuffersink_put_overlay_image_memcpy(GstFramebufferSink *framebuffersink
   gst_memory_map (vmem, &mapinfo, GST_MAP_WRITE);
   framebuffer_address = mapinfo.data;
   if (framebuffersink->overlay_alignment_is_native)
-    memcpy(framebuffer_address, src, framebuffersink->info.size);
+    memcpy(framebuffer_address, src, framebuffersink->video_info.size);
   else {
     int i;
-    int n = GST_VIDEO_INFO_N_PLANES (&framebuffersink->info);
+    int n = GST_VIDEO_INFO_N_PLANES (&framebuffersink->video_info);
     guintptr offset;
     for (i = 0; i < n; i++) {
       offset = framebuffersink->overlay_plane_offset[i];
-      if (GST_VIDEO_INFO_PLANE_STRIDE (&framebuffersink->info, i) ==
+      if (GST_VIDEO_INFO_PLANE_STRIDE (&framebuffersink->video_info, i) ==
           framebuffersink->overlay_scanline_stride[i])
         memcpy(framebuffer_address + offset, src, framebuffersink->overlay_scanline_stride[i]
             * framebuffersink->videosink.height);
@@ -1041,13 +1045,13 @@ gst_framebuffersink_caps_set_preferences (GstFramebufferSink *framebuffersink, G
 
   /* Honour video size requests if the preserve_par property is not set; */
   /* otherwise set the allowable range up to the screen size. */
-  if ((!framebuffersink->preserve_par || fix_width_if_possible) && framebuffersink->requested_video_width != 0)
+  if (fix_width_if_possible && framebuffersink->requested_video_width != 0)
     gst_caps_set_simple(caps,
         "width", G_TYPE_INT, framebuffersink->requested_video_width, NULL);
   else
     gst_caps_set_simple (caps, "width", GST_TYPE_INT_RANGE, 1,
        GST_VIDEO_INFO_WIDTH (&framebuffersink->screen_info), NULL);
-  if ((!framebuffersink->preserve_par || fix_width_if_possible) && framebuffersink->requested_video_height != 0)
+  if (fix_width_if_possible && framebuffersink->requested_video_height != 0)
     gst_caps_set_simple(caps,
         "height", G_TYPE_INT, framebuffersink->requested_video_height, NULL);
   else
@@ -1264,14 +1268,6 @@ gst_framebuffersink_get_caps (GstBaseSink * sink, GstCaps * filter)
 
   caps = gst_caps_simplify (caps);
 
-  framebuffersink->adjusted_dimensions = TRUE;
-  framebuffersink->adjusted_width = w;
-  framebuffersink->adjusted_height = h;
-  if (framebuffersink->requested_video_width != 0)
-    framebuffersink->adjusted_width = framebuffersink->requested_video_width;
-  if (framebuffersink->requested_video_height != 0)
-    framebuffersink->adjusted_height = framebuffersink->requested_video_height;
-
   /* Return the intersection of the current caps with the filter caps. */
   if (filter != NULL) {
     GstCaps *icaps;
@@ -1296,6 +1292,7 @@ done_no_store:
   return caps;
 }
 
+#if 0
 static GstCaps *
 gst_framebuffersink_get_caps_old (GstBaseSink * sink, GstCaps * filter)
 {
@@ -1545,7 +1542,7 @@ done_no_store:
 
   return caps;
 }
-
+#endif
 
 /* This function is called from set_caps when we are configured with */
 /* use_buffer_pool=true, and from propose_allocation */
@@ -1599,15 +1596,6 @@ GstVideoInfo *info) {
   gst_buffer_pool_config_set_allocator (config, allocator, NULL);
   if (!gst_buffer_pool_set_config (newpool, config))
     goto config_failed;
-
-//  GST_OBJECT_LOCK (framebuffersink);
-//  oldpool = framebuffersink->pool;
-//  framebuffersink->pool = newpool;
-//  GST_OBJECT_UNLOCK (framebuffersink);
-
-//  if (oldpool) {
-//    gst_object_unref (oldpool);
-//  }
 
   g_sprintf(s, "Succesfully allocated buffer pool (frame size %zd, %d buffers)",
       info->size, n);
@@ -1733,6 +1721,8 @@ gst_framebuffersink_set_caps (GstBaseSink * sink, GstCaps * caps)
   GstFramebufferSinkClass *klass = GST_FRAMEBUFFERSINK_GET_CLASS (framebuffersink);
   GstVideoInfo info;
   GstVideoFormat matched_overlay_format;
+  GstVideoRectangle src_video_rectangle;
+  GstVideoRectangle screen_video_rectangle;
   int i;
 
   if (!gst_video_info_from_caps (&info, caps))
@@ -1740,7 +1730,7 @@ gst_framebuffersink_set_caps (GstBaseSink * sink, GstCaps * caps)
 
   GST_OBJECT_LOCK (framebuffersink);
 
-  if (gst_video_info_is_equal(&info, &framebuffersink->info)) {
+  if (gst_video_info_is_equal(&info, &framebuffersink->video_info)) {
     GST_OBJECT_UNLOCK (framebuffersink);
     GST_WARNING_OBJECT (framebuffersink, "set_caps called with same caps");
     return TRUE;
@@ -1748,72 +1738,82 @@ gst_framebuffersink_set_caps (GstBaseSink * sink, GstCaps * caps)
 
   GST_INFO_OBJECT (framebuffersink, "Negotiated caps: %" GST_PTR_FORMAT "\n", caps);
 
-  /* Set the video parameters. */
-  framebuffersink->fps_n = info.fps_n;
-  framebuffersink->fps_d = info.fps_d;
-
+  /* Set the video parameters for GstVideoSink. */
   framebuffersink->videosink.width = info.width;
   framebuffersink->videosink.height = info.height;
 
-  framebuffersink->framebuffer_video_width_in_bytes = framebuffersink->videosink.width *
-      GST_VIDEO_INFO_COMP_PSTRIDE (&framebuffersink->screen_info, 0);
+  if (framebuffersink->videosink.width <= 0 || framebuffersink->videosink.height <= 0)
+    goto no_display_size;
 
   gst_framebuffersink_calculate_plane_widths(framebuffersink, &info);
 
-  if (framebuffersink->framebuffer_video_width_in_bytes > GST_VIDEO_INFO_COMP_STRIDE (
-      &framebuffersink->screen_info, 0))
-    framebuffersink->framebuffer_video_width_in_bytes =
-        GST_VIDEO_INFO_COMP_STRIDE (&framebuffersink->screen_info, 0);
+  matched_overlay_format = GST_VIDEO_INFO_FORMAT (&info);
+  if (!gst_framebuffersink_video_format_supported_by_overlay (framebuffersink, matched_overlay_format))
+    matched_overlay_format = GST_VIDEO_FORMAT_UNKNOWN;
 
-  framebuffersink->clipped_height = framebuffersink->videosink.height;
-  if (framebuffersink->clipped_height > GST_VIDEO_INFO_HEIGHT (&framebuffersink->screen_info))
-    framebuffersink->clipped_height = GST_VIDEO_INFO_HEIGHT (&framebuffersink->screen_info);
+  /* Set the dimensions of the source video rectangle and screen video rectangle. */
+  src_video_rectangle.x = 0;
+  src_video_rectangle.y = 0;
+  src_video_rectangle.w = info.width;
+  src_video_rectangle.h = info.height;
+  screen_video_rectangle.x = 0;
+  screen_video_rectangle.y = 0;
+  screen_video_rectangle.w = GST_VIDEO_INFO_WIDTH(&framebuffersink->screen_info);
+  screen_video_rectangle.h = GST_VIDEO_INFO_HEIGHT(&framebuffersink->screen_info);
 
-  if (framebuffersink->videosink.width <= 0 || framebuffersink->videosink.height <= 0)
-    goto no_display_size;
+  /* Clip and center video rectangle. */
+  if (matched_overlay_format == GST_VIDEO_FORMAT_UNKNOWN) {
+    /* No scaling; clip and center against the dimensions of the screen. */
+    gst_video_sink_center_rect (src_video_rectangle, screen_video_rectangle,
+        &framebuffersink->video_rectangle, FALSE);
+  }
+  else {
+    /* Set video rectangle when hardware scaler is enabled. */
+    GstVideoRectangle dst_video_rectangle;
+    GstVideoRectangle temp_video_rectangle;
+    dst_video_rectangle.x = 0;
+    dst_video_rectangle.y = 0;
+    dst_video_rectangle.w = info.width;
+    dst_video_rectangle.h = info.height;
+    /* When using the hardware scaler, the incoming video size may not match the desired window size. */
+    if (framebuffersink->requested_video_width != 0 &&
+        framebuffersink->requested_video_width != info.width)
+      dst_video_rectangle.w = framebuffersink->requested_video_width;
+    if (framebuffersink->requested_video_height != 0 &&
+        framebuffersink->requested_video_height != info.height)
+      dst_video_rectangle.h = framebuffersink->requested_video_height;
+    /* Correct for aspect ratio if preserve_par property is set. */
+    if (framebuffersink->preserve_par) {
+      /* Assume a display aspect ratio of 1:1. */
+      guint dar_n, dar_d;
+      if (gst_video_calculate_display_ratio (&dar_n, &dar_d, info.width, info.height,
+          info.par_n, info.par_d, 1, 1)) {
+        src_video_rectangle.w = gst_util_uint64_scale_round (src_video_rectangle.w, dar_d, dar_n);
+        src_video_rectangle.h = gst_util_uint64_scale_round (src_video_rectangle.h, dar_n, dar_d);
+      }
+    }
+    /* Insert black boxes if necessary. */
+    gst_video_sink_center_rect (src_video_rectangle, dst_video_rectangle,
+        &temp_video_rectangle, TRUE);
+    /* Center it. */
+    gst_video_sink_center_rect (temp_video_rectangle, screen_video_rectangle,
+        &framebuffersink->video_rectangle, FALSE);
+  }
+
+  framebuffersink->video_rectangle_width_in_bytes = framebuffersink->video_rectangle.w *
+      GST_VIDEO_INFO_COMP_PSTRIDE (&framebuffersink->screen_info, 0);
+
+  if (framebuffersink->video_rectangle_width_in_bytes <= 0 || framebuffersink->video_rectangle.h <= 0)
+    goto no_display_output_size;
 
   if (framebuffersink->flip_buffers > 0) {
     if (framebuffersink->flip_buffers < framebuffersink->max_framebuffers)
       framebuffersink->max_framebuffers = framebuffersink->flip_buffers;
   }
 
-  matched_overlay_format = GST_VIDEO_INFO_FORMAT (&info);
-  if (!gst_framebuffersink_video_format_supported_by_overlay (framebuffersink, matched_overlay_format))
-    matched_overlay_format = GST_VIDEO_FORMAT_UNKNOWN;
-
-  if (framebuffersink->adjusted_dimensions) {
-    framebuffersink->scaled_width = framebuffersink->adjusted_width;
-    framebuffersink->scaled_height = framebuffersink->adjusted_height;
-  }
-  else {
-    framebuffersink->scaled_width = info.width;
-    framebuffersink->scaled_height = info.height;
-    /* When using the hardware scaler, and upstream didn't call get_caps with */
-    /* the negotiated caps, update the output dimensions for the scaler. */
-    if (matched_overlay_format != GST_VIDEO_FORMAT_UNKNOWN) {
-      if (framebuffersink->requested_video_width != 0 &&
-          framebuffersink->requested_video_width != info.width)
-        framebuffersink->scaled_width = framebuffersink->requested_video_width;
-      if (framebuffersink->requested_video_height != 0 &&
-          framebuffersink->requested_video_height != info.height)
-        framebuffersink->scaled_height = framebuffersink->requested_video_height;
-    }
-  }
-
-  /* If the video size is smaller than the screen, center the video. */
-  framebuffersink->cx = ((int) GST_VIDEO_INFO_WIDTH (&framebuffersink->screen_info) -
-      framebuffersink->scaled_width) / 2;
-  if (framebuffersink->cx < 0)
-    framebuffersink->cx = 0;
-
-  framebuffersink->cy = ((int) GST_VIDEO_INFO_HEIGHT (&framebuffersink->screen_info) -
-      framebuffersink->scaled_height) / 2;
-  if (framebuffersink->cy < 0)
-    framebuffersink->cy = 0;
-
   /* Check whether we will use the hardware overlay feature. */
-  if (((framebuffersink->scaled_width != framebuffersink->videosink.width
-      || framebuffersink->scaled_height != framebuffersink->videosink.height)
+  if (((framebuffersink->video_rectangle.w != framebuffersink->videosink.width
+      || framebuffersink->video_rectangle.h != framebuffersink->videosink.height)
       || matched_overlay_format != GST_VIDEO_INFO_FORMAT (&framebuffersink->screen_info))
       && matched_overlay_format != GST_VIDEO_FORMAT_UNKNOWN
       && framebuffersink->use_hardware_overlay) {
@@ -1883,7 +1883,7 @@ reconfigure:
   /* When using buffer pools, do the appropriate checks and allocate a */
   /* new buffer pool. */
   if (framebuffersink->use_buffer_pool &&
-      framebuffersink->framebuffer_video_width_in_bytes != GST_VIDEO_INFO_COMP_STRIDE (
+      framebuffersink->video_rectangle_width_in_bytes != GST_VIDEO_INFO_COMP_STRIDE (
       &framebuffersink->screen_info, 0)) {
     GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, "Cannot use buffer pool in video "
         "memory because video width is not equal to the configured framebuffer "
@@ -1955,7 +1955,7 @@ success:
 
 finish:
 
-  framebuffersink->info = info;
+  framebuffersink->video_info = info;
 
   /* Clear all used framebuffers to black. */
   if (framebuffersink->clear) {
@@ -2009,6 +2009,12 @@ no_display_size:
   {
     GST_ERROR_OBJECT (framebuffersink,
         "No video size configured, caps: %" GST_PTR_FORMAT, caps);
+    GST_OBJECT_UNLOCK (framebuffersink);
+    return FALSE;
+  }
+no_display_output_size:
+  {
+    GST_ERROR_OBJECT (framebuffersink, "No display output size configured");
     GST_OBJECT_UNLOCK (framebuffersink);
     return FALSE;
   }
@@ -2292,16 +2298,6 @@ GstQuery *query, GstBufferPool *pool, GstCaps *caps, GstVideoInfo *info)
     /* Add the video memory allocator currently configured on the buffer pool. */
     gst_buffer_pool_config_get_allocator (config, &allocator, &params);
     gst_query_add_allocation_param (query, allocator, NULL);
-
-#if 0
-    /* Add the default allocator. */
-    allocator = gst_allocator_find (NULL);
-    gst_allocation_params_init (&allocation_params);
-    gst_query_add_allocation_param (query,
-        allocator,
-        &allocation_params);
-    gst_object_unref (allocator);
-#endif
 
 #ifdef HALF_POOLS
     n /= 2;
