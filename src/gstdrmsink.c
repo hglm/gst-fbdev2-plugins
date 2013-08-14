@@ -88,7 +88,7 @@
  * <title>Caveats</title>
  * <para>
  * The actual implementation of the Linux DRM API varies between
- * systems. Some implementation fail to implement a real vsync but instead
+ * systems. Some implementations fail to implement a real vsync but instead
  * seem to be use some kind of fake timer close to the refresh frequency,
  * which will produce tearing.
  * </para>
@@ -122,6 +122,12 @@
 #include <gst/video/video.h>
 #include <gst/video/video-info.h>
 #include "gstdrmsink.h"
+
+/* When LAZY_ALLOCATION is defined, memory buffers are only allocated
+   when they are actually mapped for the first time. This solves the
+   problem of GStreamer allocating multiple pools without freeing the
+   previous one soon enough (resulting in running out of video memory) */
+#define LAZY_ALLOCATION
 
 // #define USE_DRM_PLANES
 
@@ -671,15 +677,42 @@ typedef struct
   struct drm_mode_map_dumb mreq;
   uint32_t fb;
   gpointer map_address;
+  gboolean allocated;
 } GstDrmSinkVideoMemory;
 
+#ifdef LAZY_ALLOCATION
+/* With lazy allocation, don't allocate video memory immediately, but wait
+   until the first memory_map call. */
+static GstMemory *
+gst_drmsink_video_memory_allocator_alloc (GstAllocator *allocator, gsize size,
+    GstAllocationParams *allocation_params)
+{
+  GstDrmSinkVideoMemory *mem;
+  /* Always ignore allocation_params, but use word alignment. */
+  int align = 3;
+  mem = g_slice_new (GstDrmSinkVideoMemory);
+  gst_memory_init (GST_MEMORY_CAST (mem), GST_MEMORY_FLAG_NO_SHARE |
+      GST_MEMORY_FLAG_VIDEO_MEMORY, allocator, NULL, size, align, 0, size);
+  mem->allocated = FALSE;
+  mem->map_address = NULL;
+  return GST_MEMORY_CAST (mem);
+}
+#endif
+
+#ifdef LAZY_ALLOCATION
+static GstMemory *
+gst_drmsink_video_memory_allocator_alloc_actual (GstAllocator *allocator, gsize size,
+GstAllocationParams *params, GstDrmSinkVideoMemory *mem)
+{
+#else
 static GstMemory *
 gst_drmsink_video_memory_allocator_alloc (GstAllocator *allocator, gsize size,
 GstAllocationParams *params)
 {
+  GstDrmSinkVideoMemory *mem;
+#endif
   GstDrmSinkVideoMemoryAllocator *drmsink_video_memory_allocator =
       (GstDrmSinkVideoMemoryAllocator *)allocator;
-  GstDrmSinkVideoMemory *mem;
   struct drm_mode_destroy_dumb dreq;
   int ret;
   /* Ignore params (which should be NULL) and use word alignment. */
@@ -689,7 +722,9 @@ GstAllocationParams *params)
 
   GST_OBJECT_LOCK (allocator);
 
+#ifndef LAZY_ALLOCATION
   mem = g_slice_new (GstDrmSinkVideoMemory);
+#endif
 
   mem->creq.height = drmsink_video_memory_allocator->h;
   mem->creq.width = drmsink_video_memory_allocator->w;
@@ -701,7 +736,9 @@ GstAllocationParams *params)
       &mem->creq);
   if (ret < 0) {
     GST_DRMSINK_MESSAGE_OBJECT (drmsink_video_memory_allocator->drmsink, "Creating dumb drm buffer failed");
+#ifndef LAZY_ALLOCATION
     g_slice_free (GstDrmSinkVideoMemory, mem);
+#endif
     GST_OBJECT_UNLOCK (allocator);
     return NULL;
   }
@@ -749,9 +786,11 @@ GstAllocationParams *params)
     goto fail_destroy;
   }
 
+#ifndef LAZY_ALLOCATION
   gst_memory_init (GST_MEMORY_CAST (mem), GST_MEMORY_FLAG_NO_SHARE |
       GST_MEMORY_FLAG_VIDEO_MEMORY,
       (GstAllocator *)drmsink_video_memory_allocator, NULL, size, align, 0, size);
+#endif
 
   drmsink_video_memory_allocator->total_allocated += size;
 
@@ -768,7 +807,9 @@ fail_destroy :
 
     dreq.handle = mem->creq.handle;
     drmIoctl (drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
+#ifndef LAZY_ALLOCATION
     g_slice_free (GstDrmSinkVideoMemory, mem);
+#endif
     GST_OBJECT_UNLOCK (allocator);
     return NULL;
 }
@@ -784,31 +825,48 @@ gst_drmsink_video_memory_allocator_free (GstAllocator * allocator, GstMemory * m
   GST_INFO_OBJECT (drmsink_video_memory_allocator->drmsink,
       "video_memory_allocator_free called, address = %p\n", vmem->map_address);
 
+#ifdef LAZY_ALLOCATION
+  if (!vmem->allocated) {
+      g_slice_free (GstDrmSinkVideoMemory, vmem);
+      return;
+  }
+#endif
+
   drmsink_video_memory_allocator->total_allocated -= mem->size;
 
   munmap (vmem->map_address, vmem->creq.size);
   dreq.handle = vmem->creq.handle;
   drmIoctl (drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
 
-  g_slice_free1 (sizeof (GstDrmSinkVideoMemory), vmem);
+  g_slice_free (GstDrmSinkVideoMemory, vmem);
 
   GST_DEBUG ("%p: freed", vmem);
 }
 
 static gpointer
-gst_drmsink_video_memory_map (GstDrmSinkVideoMemory * mem, gsize maxsize, GstMapFlags flags)
+gst_drmsink_video_memory_map (GstMemory * mem, gsize maxsize, GstMapFlags flags)
 {
+  GstDrmSinkVideoMemory *vmem = (GstDrmSinkVideoMemory *)mem;
   GST_DEBUG ("video_memory_map called, mem = %p, maxsize = %d, flags = %d, data = %p\n", mem,
-      maxsize, flags, mem->map_address);
+      maxsize, flags, vmem->map_address);
 
   if (flags & GST_MAP_READ)
     GST_DEBUG ("Mapping video memory for reading is slow.\n");
 
-  return mem->map_address;
+#ifdef LAZY_ALLOCATION
+  if (!vmem->allocated) {
+    if (!gst_drmsink_video_memory_allocator_alloc_actual (mem->allocator, mem->maxsize, NULL,
+        vmem))
+      return NULL;
+    vmem->allocated = TRUE;
+  }
+#endif
+
+  return vmem->map_address;
 }
 
 static gboolean
-gst_drmsink_video_memory_unmap (GstDrmSinkVideoMemory * mem)
+gst_drmsink_video_memory_unmap (GstMemory * mem)
 {
   GST_DEBUG ("%p: unmapped", mem);
   return TRUE;

@@ -69,7 +69,7 @@
 /* When LAZY_ALLOCATION is defined, memory buffers are only allocated
    when they are actually mapped for the first time. This solves the
    problem of GStreamer allocating multiple pools without freeing the
-   previous one soon enough (resulting in lack of video memory) */
+   previous one soon enough (resulting in running out of video memory) */
 #define LAZY_ALLOCATION
 
 GST_DEBUG_CATEGORY_STATIC (gst_fbdevframebuffersink_debug_category);
@@ -467,8 +467,9 @@ gst_fbdevframebuffersink_video_memory_map (GstMemory *mem, gsize maxsize, GstMap
 
 #ifdef LAZY_ALLOCATION
   if (!vmem->allocated) {
-    gst_fbdevframebuffersink_video_memory_allocator_alloc_actual (mem->allocator, mem->maxsize, NULL,
-        vmem);
+    if (!gst_fbdevframebuffersink_video_memory_allocator_alloc_actual (mem->allocator,
+        mem->maxsize, NULL, vmem))
+      return NULL;
     vmem->allocated = TRUE;
   }
 #endif

@@ -83,8 +83,6 @@ GST_DEBUG_CATEGORY_STATIC (gst_framebuffersink_debug_category);
 static GstVideoSinkClass *parent_class = NULL;
 
 /* Definitions to influence buffer pool allocation. */
-/* Provide the same pool for repeated requests. */
-/* #define USE_SAME_POOL */
 /* Provide another video memory pool for repeated requests. */
 #define MULTIPLE_VIDEO_MEMORY_POOLS
 /* Provide half of the available video memory pool buffers per request. */
@@ -2364,20 +2362,13 @@ gst_framebuffersink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
   /* Take a look at our pre-initialized pool in video memory. */
   pool = framebuffersink->pool ? gst_object_ref (framebuffersink->pool) : NULL;
 
-#ifdef USE_SAME_POOL
-  if (pool)
-    if (gst_buffer_pool_is_active (pool)) {
-      GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, "Cannot provide query with already activated pool");
-      gst_object_unref (pool);
-      pool = NULL;
-    }
-#endif
-
-  /* If we had a buffer pool in video memory and it has been allocated, */
-  /* we can't easily provide regular system memory buffers because */
-  /* due to the difficulty of handling page flips correctly. */
+  /* If we had a buffer pool in video memory and it has been allocated,
+     we can't easily provide regular system memory buffers because
+     due to the difficulty of handling page flips correctly. However,
+     with a lazy allocation scheme multiple video memory pools can
+     coexist without running out of video memory. */
   if (framebuffersink->use_buffer_pool && pool == NULL) {
-    GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
+    GST_INFO_OBJECT (framebuffersink,
         "propose_allocation: Already provided video memory buffer pool");
   }
 
@@ -2398,11 +2389,9 @@ gst_framebuffersink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
     gst_structure_free (config);
   }
 
-#ifndef USE_SAME_POOL
   if (pool) {
     framebuffersink->pool = NULL;
   }
-#endif
 
 #ifdef MULTIPLE_VIDEO_MEMORY_POOLS
   if (framebuffersink->use_buffer_pool && pool == NULL && need_pool) {
