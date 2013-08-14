@@ -2343,7 +2343,7 @@ gst_framebuffersink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
   GstBufferPool *pool;
   GstStructure *config;
   GstCaps *caps;
-  gsize size;
+  guint size;
   GstVideoInfo info;
   gboolean need_pool;
 

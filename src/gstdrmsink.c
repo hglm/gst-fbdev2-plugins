@@ -798,8 +798,6 @@ GstAllocationParams *params)
       "Allocated video memory buffer of size %zd at %p, align %d, mem = %p\n",
       size, mem->map_address, align, mem);
 
-  memset (mem->map_address, 0, size);
-
   GST_OBJECT_UNLOCK (allocator);
   return (GstMemory *) mem;
 
