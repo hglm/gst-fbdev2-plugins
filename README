@@ -3,7 +3,7 @@
 This repository implements a set of optimized GStreamer 1.0-based video
 sink classes for framebuffers and hardware overlays, including the Linux
 console framebuffer. It is implemented in a base class called
-GstFramebufferSink, a derived base class called GstFbdevFramebufferSink
+GstFramebufferSink, and a derived base class called GstFbdevFramebufferSink
 for fbdev devices. These two classes are available in the library
 libgstframebuffersink. An actual plugin implementation called 'fbdev2sink'
 is implemented that is derived from GstFbdevFramebuffeerSink, suitable for
@@ -16,12 +16,12 @@ scaling overlay for several YUY formats and BGRx.
 
 Class schematic:
 
-GstVideoSink -> GstFramebufferSink -> GstFbDevFramebufferSink -> GstFbdev2Sink (plugin)
+GstVideoSink -> GstFramebufferSink -> GstFbdevFramebufferSink -> GstFbdev2Sink (plugin)
                                   \                          \
                                    -> GstDrmSink (plugin)     -> GstSunxifbSink (plugin)
 
 The GstFramebufferSink class is generic enough that other plugins could be
-implemented, including ones using hardware overlay APIs.
+implemented, possibly including ones using hardware overlay APIs.
 
 This is work-in-progress although the plugins should be quite usable in
 its current form.
@@ -41,8 +41,8 @@ a buffer pool but simply copying each frame from system memory (by not enabling
 the buffer-pool option) will be faster. However, when videoconvert
 filter is the last processing element before the sink, it is unlikely that the
 video memory buffers will be read back. Software scaling elements such as
-videoscalemay read back from their output buffer. Other sources such as
-videotestsrc neverread back from the buffers and can be run at full speed
+videoscale may read back from their output buffer. Other sources such as
+videotestsrc never read back from the buffers and can be run at full speed
 with the buffer pool enabled. The "benchmark" property can be set to true on
 all derived sinks to test video memory read/write speed.
 
@@ -71,10 +71,10 @@ Example launch line:
 gst-launch-1.0 videotestsrc horizontal-speed=5 ! queue ! fbdev2sink buffer-pool=true \
 full-screen=true fps=30 >output
 
-This line uses direct streaming into video memory (buffer-pool=true), forces
+This pipeline uses direct streaming into video memory (buffer-pool=true), forces
 the window size to the native full-screen resolution (full-screen=true),
 sets the frames per second to 30, and the text output is directed into the
-file output. The queue forces the sink to use a seperate threead. If everything
+file output. The queue forces the sink to use a seperate thread. If everything
 is working correctly this should show a tear-free, multi-buffered scrolling image.
 Verify the file "output" to see whether any features were disabled and everything
 is working correctly.
@@ -83,7 +83,7 @@ gst-launch-1.0 playbin uri=file:///home/me/videos/video.mp4 \
 video-sink="fbdev2sink buffer-pool=true full-screen=true \
 graphics-mode=true pan-does-vsync=true" >output
 
-This line runs playbin with fbdev2sink configured with the given parameters.
+This pipeline runs playbin with fbdev2sink configured with the given parameters.
 Because video memory read access is slow, the following might be faster:
 
 gst-launch-1.0 playbin uri=file:///home/me/videos/video.mp4 \
@@ -209,5 +209,5 @@ For drmsink:
 
 - The preserve-par property is currently disabled. Because we can't rely on
   changing hardware scaling parameters when set_caps is called (as is done is
-  elements like xvimagesink), we need to inform upstream to do the appropriate
-  scaling during caps negotiation (get_caps).
+  elements like xvimagesink), we would need to inform upstream to do the
+  appropriate scaling during caps negotiation (get_caps).
