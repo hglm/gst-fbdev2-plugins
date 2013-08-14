@@ -1043,8 +1043,7 @@ gst_framebuffersink_caps_set_preferences (GstFramebufferSink *framebuffersink, G
     goto skip_video_size_request;
   }
 
-  /* Honour video size requests if the preserve_par property is not set; */
-  /* otherwise set the allowable range up to the screen size. */
+  /* Honour video size requests, otherwise set the allowable range up to the screen size. */
   if (fix_width_if_possible && framebuffersink->requested_video_width != 0)
     gst_caps_set_simple(caps,
         "width", G_TYPE_INT, framebuffersink->requested_video_width, NULL);
@@ -1784,20 +1783,29 @@ gst_framebuffersink_set_caps (GstBaseSink * sink, GstCaps * caps)
       dst_video_rectangle.h = framebuffersink->requested_video_height;
     /* Correct for aspect ratio if preserve_par property is set. */
     if (framebuffersink->preserve_par) {
-      /* Assume a display aspect ratio of 1:1. */
-      guint dar_n, dar_d;
-      if (gst_video_calculate_display_ratio (&dar_n, &dar_d, info.width, info.height,
-          info.par_n, info.par_d, 1, 1)) {
-        src_video_rectangle.w = gst_util_uint64_scale_round (src_video_rectangle.w, dar_d, dar_n);
-        src_video_rectangle.h = gst_util_uint64_scale_round (src_video_rectangle.h, dar_n, dar_d);
-      }
+      /* Assume a display pixel aspect ratio of 1:1. */
+      guint display_par_n = 1;
+      guint display_par_d = 1;
+      src_video_rectangle.w = gst_util_uint64_scale_round (src_video_rectangle.w,
+          info.par_d * display_par_d, info.par_n * display_par_n);
+      GST_DEBUG_OBJECT (framebuffersink, "Source video rectangle after correction of size (%u, %u)",
+          src_video_rectangle.w, src_video_rectangle.h);
+      /* Insert black boxes if necessary. */
+      gst_video_sink_center_rect (src_video_rectangle, dst_video_rectangle,
+          &temp_video_rectangle, TRUE);
+      GST_DEBUG_OBJECT (framebuffersink, "Video rectangle after scaling of (%u, %u)",
+          temp_video_rectangle.w, temp_video_rectangle.h);
+      /* Center it. */
+      gst_video_sink_center_rect (temp_video_rectangle, screen_video_rectangle,
+          &framebuffersink->video_rectangle, FALSE);
     }
-    /* Insert black boxes if necessary. */
-    gst_video_sink_center_rect (src_video_rectangle, dst_video_rectangle,
-        &temp_video_rectangle, TRUE);
-    /* Center it. */
-    gst_video_sink_center_rect (temp_video_rectangle, screen_video_rectangle,
-        &framebuffersink->video_rectangle, FALSE);
+    else
+      /* Center it. */
+      gst_video_sink_center_rect (dst_video_rectangle, screen_video_rectangle,
+          &framebuffersink->video_rectangle, FALSE);
+    GST_INFO_OBJECT (framebuffersink, "Display rectangle at (%u, %u) of size (%u, %u)",
+        framebuffersink->video_rectangle.x, framebuffersink->video_rectangle.y,
+        framebuffersink->video_rectangle.w, framebuffersink->video_rectangle.h);
   }
 
   framebuffersink->video_rectangle_width_in_bytes = framebuffersink->video_rectangle.w *
@@ -2493,7 +2501,7 @@ gst_framebuffersink_change_state (GstElement * element, GstStateChange transitio
   return ret;
 }
 
-/* The following function also works for all video memory types as long as the */
+/* The following function works for all video memory types as long as the */
 /* GST_MEMORY_FLAG_VIDEO_MEMORY flag is set on the memory object. */
 static gboolean
 gst_framebuffersink_is_video_memory (GstFramebufferSink *framebuffersink, GstMemory * mem)
