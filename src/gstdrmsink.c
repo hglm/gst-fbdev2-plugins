@@ -134,8 +134,7 @@ static inline void GST_DRMSINK_MESSAGE_OBJECT (GstDrmsink *drmsink,
 const gchar *message) {
   if (!drmsink->framebuffersink.silent)
     g_print ("%s.\n", message);
-  else
-    GST_INFO_OBJECT (drmsink, message);
+  GST_INFO_OBJECT (drmsink, message);
 }
 
 #define DEFAULT_DRM_DEVICE "/dev/dri/card0"

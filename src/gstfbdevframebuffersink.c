@@ -44,7 +44,6 @@
 #endif
 
 #include <stdlib.h>
-#include <inttypes.h>
 #include <signal.h>
 #include <string.h>
 #include <sys/time.h>
@@ -67,6 +66,12 @@
 #include <gst/video/gstvideometa.h>
 #include "gstfbdevframebuffersink.h"
 
+/* When LAZY_ALLOCATION is defined, memory buffers are only allocated
+   when they are actually mapped for the first time. This solves the
+   problem of GStreamer allocating multiple pools without freeing the
+   previous one soon enough (resulting in lack of video memory) */
+#define LAZY_ALLOCATION
+
 GST_DEBUG_CATEGORY_STATIC (gst_fbdevframebuffersink_debug_category);
 #define GST_CAT_DEFAULT gst_fbdevframebuffersink_debug_category
 
@@ -76,8 +81,7 @@ static void GST_FBDEVFRAMEBUFFERSINK_MESSAGE_OBJECT (GstFbdevFramebufferSink *fb
 const gchar *message) {
   if (!fbdevframebuffersink->framebuffersink.silent)
     g_print ("%s.\n", message);
-  else
-    GST_INFO_OBJECT (fbdevframebuffersink, message);
+  GST_INFO_OBJECT (fbdevframebuffersink, message);
 }
 
 #define ALIGNMENT_GET_ALIGN_BYTES(offset, align) \
@@ -309,10 +313,10 @@ gst_fbdevframebuffersink_open_hardware (GstFramebufferSink *framebuffersink,
 
   {
     gchar *s = g_strdup_printf("Succesfully opened fbdev framebuffer device %s, "
-        "mapped sized %td MB of which %" PRIu64 " MB (%d buffers) usable for page flipping",
+        "mapped sized %.2lf MB of which %.2lf MB (%d buffers) usable for page flipping",
         framebuffersink->device,
-        fbdevframebuffersink->framebuffer_map_size / (1024 * 1024),
-        (uint64_t)max_framebuffers * fixinfo.line_length *
+        (double) fbdevframebuffersink->framebuffer_map_size / (1024 * 1024),
+        (double) max_framebuffers * fixinfo.line_length *
         GST_VIDEO_INFO_HEIGHT (info) / (1024 * 1024), max_framebuffers);
     GST_FBDEVFRAMEBUFFERSINK_MESSAGE_OBJECT(fbdevframebuffersink, s);
     g_free (s);
@@ -438,27 +442,44 @@ typedef struct
 {
   GstMemory mem;
   gpointer data;
+#ifdef LAZY_ALLOCATION
+  gboolean allocated;
+#endif
 } GstFbdevFramebufferSinkVideoMemory;
 
-static gpointer
-gst_fbdevframebuffersink_video_memory_map (GstFbdevFramebufferSinkVideoMemory * mem, gsize maxsize, GstMapFlags flags)
-{
-#if 0
-  GST_LOG ("video_memory_map called, mem = %p, maxsize = %d, flags = %d, data = %p\n", mem,
-      maxsize, flags, mem->data);
-
-  if (flags & GST_MAP_READ)
-    GST_LOG ("Mapping video memory for reading is slow.\n");
+#ifdef LAZY_ALLOCATION
+static GstMemory *gst_fbdevframebuffersink_video_memory_allocator_alloc_actual (
+    GstAllocator *allocator, gsize size, GstAllocationParams *allocation_params,
+    GstFbdevFramebufferSinkVideoMemory *mem);
 #endif
 
-  return mem->data;
+static gpointer
+gst_fbdevframebuffersink_video_memory_map (GstMemory *mem, gsize maxsize, GstMapFlags flags)
+{
+  GstFbdevFramebufferSinkVideoMemory *vmem = (GstFbdevFramebufferSinkVideoMemory *)mem;
+#if 1
+  GST_DEBUG ("video_memory_map called, mem = %p, maxsize = %d, flags = %d, data = %p\n", mem,
+      maxsize, flags, vmem->data);
+
+  if (flags & GST_MAP_READ)
+    GST_DEBUG ("Mapping video memory for reading is slow.\n");
+#endif
+
+#ifdef LAZY_ALLOCATION
+  if (!vmem->allocated) {
+    gst_fbdevframebuffersink_video_memory_allocator_alloc_actual (mem->allocator, mem->maxsize, NULL,
+        vmem);
+    vmem->allocated = TRUE;
+  }
+#endif
+
+  return vmem->data;
 }
 
-static gboolean
-gst_fbdevframebuffersink_video_memory_unmap (GstFbdevFramebufferSinkVideoMemory * mem)
+static void
+gst_fbdevframebuffersink_video_memory_unmap (GstMemory * mem)
 {
-  GST_DEBUG ("%p: unmapped", mem);
-  return TRUE;
+  return;
 }
 
 /* Video memory storage. */
@@ -517,13 +538,40 @@ GType gst_fbdevframebuffersink_video_memory_allocator_get_type (void);
 G_DEFINE_TYPE (GstFbdevFramebufferSinkVideoMemoryAllocator,
     gst_fbdevframebuffersink_video_memory_allocator, GST_TYPE_ALLOCATOR);
 
+#ifdef LAZY_ALLOCATION
 static GstMemory *
 gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator, gsize size,
     GstAllocationParams *allocation_params)
 {
   GstFbdevFramebufferSinkVideoMemoryAllocator *fbdevframebuffersink_allocator =
       (GstFbdevFramebufferSinkVideoMemoryAllocator *) allocator;
+  GstAllocationParams *params;
   GstFbdevFramebufferSinkVideoMemory *mem;
+  /* Always ignore allocation_params, but use our own specific alignment. */
+  params = &fbdevframebuffersink_allocator->params;
+  mem = g_slice_new (GstFbdevFramebufferSinkVideoMemory);
+  gst_memory_init (GST_MEMORY_CAST (mem), GST_MEMORY_FLAG_NO_SHARE |
+      GST_MEMORY_FLAG_VIDEO_MEMORY, allocator, NULL, size, params->align, 0, size);
+  mem->allocated = FALSE;
+  mem->data = NULL;
+  return GST_MEMORY_CAST (mem);
+}
+#endif
+
+#ifdef LAZY_ALLOCATION
+static GstMemory *
+gst_fbdevframebuffersink_video_memory_allocator_alloc_actual (GstAllocator *allocator, gsize size,
+    GstAllocationParams *allocation_params, GstFbdevFramebufferSinkVideoMemory *mem)
+{
+#else
+static GstMemory *
+gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator, gsize size,
+    GstAllocationParams *allocation_params)
+{
+  GstFbdevFramebufferSinkVideoMemory *mem;
+#endif
+  GstFbdevFramebufferSinkVideoMemoryAllocator *fbdevframebuffersink_allocator =
+      (GstFbdevFramebufferSinkVideoMemoryAllocator *) allocator;
   GstAllocationParams *params;
   int align_bytes;
   guintptr framebuffer_offset;
@@ -572,10 +620,12 @@ gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator, 
       }
   }
 
+#ifndef LAZY_ALLOCATION
   mem = g_slice_new (GstFbdevFramebufferSinkVideoMemory);
 
   gst_memory_init (GST_MEMORY_CAST (mem), GST_MEMORY_FLAG_NO_SHARE |
       GST_MEMORY_FLAG_VIDEO_MEMORY, allocator, NULL, size, params->align, 0, size);
+#endif
 
   mem->data = video_memory_storage->framebuffer + framebuffer_offset;
   if (framebuffer_offset + size > video_memory_storage->end_marker)
@@ -613,6 +663,13 @@ gst_fbdevframebuffersink_video_memory_allocator_free (GstAllocator * allocator, 
   GstFbdevFramebufferSinkVideoMemory *vmem = (GstFbdevFramebufferSinkVideoMemory *) mem;
   GList *chain;
 
+#ifdef LAZY_ALLOCATION
+  if (!vmem->allocated) {
+      g_slice_free (GstFbdevFramebufferSinkVideoMemory, vmem);
+      return;
+  }
+#endif
+
   gst_mini_object_lock (GST_MINI_OBJECT_CAST (video_memory_storage), GST_LOCK_FLAG_EXCLUSIVE);
 
   chain = video_memory_storage->chain;
@@ -636,6 +693,7 @@ gst_fbdevframebuffersink_video_memory_allocator_free (GstAllocator * allocator, 
       video_memory_storage->chain = g_list_delete_link (video_memory_storage->chain, chain);
       video_memory_storage->total_allocated -= mem->size;
       gst_mini_object_unlock (GST_MINI_OBJECT_CAST (video_memory_storage), GST_LOCK_FLAG_EXCLUSIVE);
+      GST_INFO ("Freed video memory buffer of size %zd at %p", mem->size, vmem->data);
       g_slice_free (GstFbdevFramebufferSinkVideoMemory, vmem);
       return;
     }
@@ -660,8 +718,8 @@ gst_fbdevframebuffersink_video_memory_allocator_init (GstFbdevFramebufferSinkVid
   GstAllocator * alloc = GST_ALLOCATOR_CAST (video_memory_allocator);
 
   alloc->mem_type = "fbdevframebuffersink_video_memory";
-  alloc->mem_map = (GstMemoryMapFunction) gst_fbdevframebuffersink_video_memory_map;
-  alloc->mem_unmap = (GstMemoryUnmapFunction) gst_fbdevframebuffersink_video_memory_unmap;
+  alloc->mem_map = gst_fbdevframebuffersink_video_memory_map;
+  alloc->mem_unmap = gst_fbdevframebuffersink_video_memory_unmap;
 }
 
 static GstAllocator *

@@ -197,7 +197,7 @@ static GstVideoFormat sunxifbsink_supported_overlay_formats_table[] = {
 /* Class initialization. */
 
 #define gst_sunxifbsink_parent_class fbdevframebuffersink_parent_class
-G_DEFINE_TYPE_WITH_CODE (GstSunxifbsink, gst_sunxifbsink, GST_TYPE_FRAMEBUFFERSINK,
+G_DEFINE_TYPE_WITH_CODE (GstSunxifbsink, gst_sunxifbsink, GST_TYPE_FBDEVFRAMEBUFFERSINK,
   GST_DEBUG_CATEGORY_INIT (gst_sunxifbsink_debug_category, "sunxifbsink", 0,
   "debug category for sunxifbsink element"));
 
