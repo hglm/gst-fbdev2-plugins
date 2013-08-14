@@ -92,6 +92,10 @@ const gchar *message) {
     offset = ALIGNMENT_GET_ALIGNED(offset, align);
 
 /* Class function prototypes. */
+static void gst_fbdevframebuffersink_set_property (GObject * object,
+    guint property_id, const GValue * value, GParamSpec * pspec);
+static void gst_fbdevframebuffersink_get_property (GObject * object,
+    guint property_id, GValue * value, GParamSpec * pspec);
 static GstAllocator *gst_fbdevframebuffersink_video_memory_allocator_new (
     GstFramebufferSink *framebuffersink, GstVideoInfo *info, gboolean pannable,
     gboolean is_overlay);
@@ -109,6 +113,7 @@ static void gst_fbdevframebuffersink_video_memory_init (gpointer framebuffer, gs
 enum
 {
   PROP_0,
+  PROP_GRAPHICS_MODE,
 };
 
 /* Class initialization. */
@@ -116,7 +121,18 @@ enum
 static void
 gst_fbdevframebuffersink_class_init (GstFbdevFramebufferSinkClass* klass)
 {
+  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstFramebufferSinkClass *framebuffer_sink_class = GST_FRAMEBUFFERSINK_CLASS (klass);
+
+  gobject_class->set_property = gst_fbdevframebuffersink_set_property;
+  gobject_class->get_property = gst_fbdevframebuffersink_get_property;
+
+  g_object_class_install_property (gobject_class, PROP_GRAPHICS_MODE,
+    g_param_spec_boolean ("graphics-mode", "Console graphics mode",
+			  "Set the console to KDGRAPHICS mode. This eliminates interference from "
+                          "text output and the cursor but can result in textmode not being restored "
+                          "in case of a crash. Use with care.",
+                          FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   framebuffer_sink_class->open_hardware = GST_DEBUG_FUNCPTR (gst_fbdevframebuffersink_open_hardware);
   framebuffer_sink_class->close_hardware = GST_DEBUG_FUNCPTR (gst_fbdevframebuffersink_close_hardware);
@@ -140,8 +156,49 @@ gst_fbdevframebuffersink_init (GstFbdevFramebufferSink *fbdevframebuffersink) {
 
   fbdevframebuffersink->framebuffer = NULL;
 
+  /* Set the initial values of the properties.*/
+  fbdevframebuffersink->use_graphics_mode = FALSE;
+
   /* Override the default value of the device property from GstFramebufferSink. */
   framebuffersink->device = g_strdup ("/dev/fb0");
+}
+
+static void
+gst_fbdevframebuffersink_set_property (GObject * object, guint property_id,
+    const GValue * value, GParamSpec * pspec)
+{
+  GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (object);
+
+  GST_DEBUG_OBJECT (fbdevframebuffersink, "set_property");
+  g_return_if_fail (GST_IS_FBDEVFRAMEBUFFERSINK (object));
+
+  switch (property_id) {
+    case PROP_GRAPHICS_MODE:
+      fbdevframebuffersink->use_graphics_mode = g_value_get_boolean (value);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+      break;
+  }
+}
+
+static void
+gst_fbdevframebuffersink_get_property (GObject * object, guint property_id,
+    GValue * value, GParamSpec * pspec)
+{
+  GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (object);
+
+  GST_DEBUG_OBJECT (fbdevframebuffersink, "get_property");
+  g_return_if_fail (GST_IS_FRAMEBUFFERSINK (object));
+
+  switch (property_id) {
+    case PROP_GRAPHICS_MODE:
+      g_value_set_boolean (value, fbdevframebuffersink->use_graphics_mode);
+      break;
+    default:
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+      break;
+  }
 }
 
 /* Helper function. */
@@ -322,12 +379,31 @@ gst_fbdevframebuffersink_open_hardware (GstFramebufferSink *framebuffersink,
     g_free (s);
   }
 
+  if (fbdevframebuffersink->use_graphics_mode) {
+    int kd_fd;
+    kd_fd = open ("/dev/tty0", O_RDWR);
+    if (kd_fd < 0)
+        goto error_setting_graphics_mode;
+    if (ioctl (kd_fd, KDGETMODE, &fbdevframebuffersink->saved_kd_mode) < 0)
+        goto error_setting_graphics_mode;
+    if (ioctl (kd_fd, KDSETMODE, KD_GRAPHICS) < 0)
+        goto error_setting_graphics_mode;
+    GST_FBDEVFRAMEBUFFERSINK_MESSAGE_OBJECT (fbdevframebuffersink, "Setting console to KD_GRAPHICS mode");
+    close (kd_fd);
+  }
+
+continue_initialization:
   return TRUE;
 
 err:
   GST_FBDEVFRAMEBUFFERSINK_MESSAGE_OBJECT (fbdevframebuffersink,
       "Could not initialize fbdev framebuffer device");
   return FALSE;
+
+error_setting_graphics_mode:
+  GST_WARNING_OBJECT (fbdevframebuffersink, "Could not set KD mode to KD_GRAPHICS");
+  fbdevframebuffersink->use_graphics_mode = FALSE;
+  goto continue_initialization;
 }
 
 /* The following member function is exported for use by derived subclasses. */
@@ -344,6 +420,13 @@ gst_fbdevframebuffersink_close_hardware (GstFramebufferSink *framebuffersink)
     GST_ERROR_OBJECT (fbdevframebuffersink, "Could not unmap video memory");
 
   close (fbdevframebuffersink->fd);
+
+  if (fbdevframebuffersink->use_graphics_mode) {
+    int kd_fd;
+    kd_fd = open ("/dev/tty0", O_RDWR);
+    ioctl (kd_fd, KDSETMODE, fbdevframebuffersink->saved_kd_mode);
+    close (kd_fd);
+  }
 
   GST_OBJECT_UNLOCK (fbdevframebuffersink);
 }

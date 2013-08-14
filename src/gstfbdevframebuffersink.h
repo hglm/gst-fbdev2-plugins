@@ -45,12 +45,16 @@ struct _GstFbdevFramebufferSink
 {
   GstFramebufferSink framebuffersink;
 
+  /* Properties. */
+  gboolean use_graphics_mode;
+
   /* fbdev device parameters. */
   int fd;
   uint8_t *framebuffer;
   guintptr framebuffer_map_size;
   struct fb_fix_screeninfo fixinfo;
   struct fb_var_screeninfo varinfo;
+  int saved_kd_mode;
 };
 
 struct _GstFbdevFramebufferSinkClass

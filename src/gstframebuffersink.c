@@ -66,7 +66,6 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <math.h>
-#include <linux/kd.h>
 #include <glib/gprintf.h>
 
 #include <gst/gst.h>
@@ -158,7 +157,6 @@ enum
   PROP_BUFFER_POOL,
   PROP_VSYNC,
   PROP_FLIP_BUFFERS,
-  PROP_GRAPHICS_MODE,
   PROP_PAN_DOES_VSYNC,
   PROP_USE_HARDWARE_OVERLAY,
   PROP_MAX_VIDEO_MEMORY_USED,
@@ -287,12 +285,6 @@ gst_framebuffersink_class_init (GstFramebufferSinkClass* klass)
                           "Page flipping is disabled when set to 1. Use of a buffer-pool requires "
                           "at least 2 buffers. Default is 0 (auto).",
                           0, G_MAXINT, 0, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_GRAPHICS_MODE,
-    g_param_spec_boolean ("graphics-mode", "Console graphics mode",
-			  "Set the console to KDGRAPHICS mode. This eliminates interference from "
-                          "text output and the cursor but can result in textmode not being restored "
-                          "in case of a crash. Use with care.",
-                          FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class, PROP_PAN_DOES_VSYNC,
     g_param_spec_boolean ("pan-does-vsync", "Pan does vsync indicator",
 			  "When set to true this property hints that the kernel display pan function "
@@ -369,7 +361,6 @@ gst_framebuffersink_init (GstFramebufferSink *framebuffersink) {
   framebuffersink->use_buffer_pool = FALSE;
   framebuffersink->vsync = TRUE;
   framebuffersink->flip_buffers = 0;
-  framebuffersink->use_graphics_mode = FALSE;
   framebuffersink->pan_does_vsync = FALSE;
   framebuffersink->use_hardware_overlay = TRUE;
   framebuffersink->preserve_par = TRUE;
@@ -502,9 +493,6 @@ gst_framebuffersink_set_property (GObject * object, guint property_id,
     case PROP_FLIP_BUFFERS:
       framebuffersink->flip_buffers = g_value_get_int (value);
       break;
-    case PROP_GRAPHICS_MODE:
-      framebuffersink->use_graphics_mode = g_value_get_boolean (value);
-      break;
     case PROP_PAN_DOES_VSYNC:
       framebuffersink->pan_does_vsync = g_value_get_boolean (value);
       break;
@@ -590,9 +578,6 @@ gst_framebuffersink_get_property (GObject * object, guint property_id,
       break;
     case PROP_FLIP_BUFFERS:
       g_value_set_int (value, framebuffersink->flip_buffers);
-      break;
-    case PROP_GRAPHICS_MODE:
-      g_value_set_boolean (value, framebuffersink->use_graphics_mode);
       break;
     case PROP_PAN_DOES_VSYNC:
       g_value_set_boolean (value, framebuffersink->pan_does_vsync);
@@ -998,21 +983,6 @@ gst_framebuffersink_start (GstBaseSink *sink)
       framebuffersink->requested_video_height = GST_VIDEO_INFO_HEIGHT (&framebuffersink->screen_info);
   }
 
-  if (framebuffersink->use_graphics_mode) {
-    int kd_fd;
-    kd_fd = open ("/dev/tty0", O_RDWR);
-    if (kd_fd < 0)
-        goto error_setting_graphics_mode;
-    if (ioctl (kd_fd, KDGETMODE, &framebuffersink->saved_kd_mode) < 0)
-        goto error_setting_graphics_mode;
-    if (ioctl (kd_fd, KDSETMODE, KD_GRAPHICS) < 0)
-        goto error_setting_graphics_mode;
-    GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, "Setting console to KD_GRAPHICS mode");
-    close (kd_fd);
-  }
-
-continue_initialization:
-
   framebuffersink->current_framebuffer_index = 0;
 
   framebuffersink->screens = NULL;
@@ -1039,11 +1009,6 @@ continue_initialization:
   framebuffersink->stats_overlay_frames_system_memory = 0;
 
   return TRUE;
-
-error_setting_graphics_mode:
-  GST_WARNING_OBJECT (framebuffersink, "Could not set KD mode to KD_GRAPHICS");
-  framebuffersink->use_graphics_mode = FALSE;
-  goto continue_initialization;
 }
 
 /* Sets size and frame-rate preferences on caps. */
@@ -2084,14 +2049,6 @@ gst_framebuffersink_stop (GstBaseSink * sink)
       framebuffersink->pool = NULL;
     }
   }
-
-  if (framebuffersink->use_graphics_mode) {
-    int kd_fd;
-    kd_fd = open ("/dev/tty0", O_RDWR);
-    ioctl (kd_fd, KDSETMODE, framebuffersink->saved_kd_mode);
-    close (kd_fd);
-  }
-
   if (framebuffersink->nu_overlays_used > 0)
     g_slice_free1 (sizeof (GstMemory *) * framebuffersink->nu_overlays_used, framebuffersink->overlays);
   if (framebuffersink->nu_screens_used > 0)
@@ -2112,6 +2069,12 @@ gst_framebuffersink_show_frame_memcpy (GstFramebufferSink *framebuffersink, GstB
 
   mem = gst_buffer_get_memory (buffer, 0);
   gst_memory_map(mem, &mapinfo, GST_MAP_READ);
+  if (mapinfo.data == NULL) {
+    GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
+        "memory_map failed; out of video memory?");
+    gst_memory_unref (mem);
+    return GST_FLOW_ERROR;
+  }
   /* When not using page flipping, wait for vsync before copying. */
   if (framebuffersink->nu_screens_used == 1 && framebuffersink->vsync)
     klass->wait_for_vsync (framebuffersink);
@@ -2129,7 +2092,7 @@ gst_framebuffersink_show_frame_memcpy (GstFramebufferSink *framebuffersink, GstB
       framebuffersink->current_framebuffer_index = 0;
   }
 
-  gst_memory_unref(mem);
+  gst_memory_unref (mem);
 
   framebuffersink->stats_video_frames_system_memory++;
 

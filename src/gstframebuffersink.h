@@ -58,7 +58,6 @@ struct _GstFramebufferSink
   gboolean use_buffer_pool;
   gboolean vsync;
   gint flip_buffers;
-  gboolean use_graphics_mode;
   gboolean pan_does_vsync;
   gboolean preserve_par;
   gint max_video_memory_property;
@@ -67,7 +66,6 @@ struct _GstFramebufferSink
 
   /* Invariant device parameters. */
   GstVideoInfo screen_info;
-  int saved_kd_mode;
   GstVideoFormat *overlay_formats_supported;
   gsize video_memory_size;
   gsize pannable_video_memory_size;
