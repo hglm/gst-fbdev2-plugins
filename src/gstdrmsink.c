@@ -244,6 +244,9 @@ gst_drmsink_init (GstDrmsink *drmsink) {
   framebuffersink->device = g_strdup (DEFAULT_DRM_DEVICE);
   /* Override the default value of the pan-does-vsync property from GstFramebufferSink. */
   framebuffersink->pan_does_vsync = TRUE;
+  /* Override the default value of the preserve-par property from GstFramebufferSink. */
+  /* The option is not supported because drmsink doesn't support hardware scaling. */
+  framebuffersink->preserve_par = FALSE;
 
   /* Set the initial values of the properties.*/
   drmsink->preferred_connector_id = - 1;
