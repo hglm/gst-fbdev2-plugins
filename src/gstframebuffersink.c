@@ -347,6 +347,10 @@ gst_framebuffersink_init (GstFramebufferSink *framebuffersink) {
   gst_video_info_init (&framebuffersink->screen_info);
   gst_video_info_init (&framebuffersink->video_info);
 
+  /* Set the pixel aspect ratio of the display device to 1:1. */
+  GST_VIDEO_INFO_PAR_N (&framebuffersink->screen_info) = 1;
+  GST_VIDEO_INFO_PAR_D (&framebuffersink->screen_info) = 1;
+
   /* Set the initial values of the properties.*/
   framebuffersink->device = NULL;
   framebuffersink->videosink.width = 0;
@@ -1762,6 +1766,10 @@ gst_framebuffersink_set_caps (GstBaseSink * sink, GstCaps * caps)
 
   /* Clip and center video rectangle. */
   if (matched_overlay_format == GST_VIDEO_FORMAT_UNKNOWN) {
+    if (framebuffersink->preserve_par && (info.par_n != framebuffersink->screen_info.par_n ||
+        info.par_d != framebuffersink->screen_info.par_d))
+      GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
+          "Cannot preserve aspect ratio in non-hardware scaling mode");
     /* No scaling; clip and center against the dimensions of the screen. */
     gst_video_sink_center_rect (src_video_rectangle, screen_video_rectangle,
         &framebuffersink->video_rectangle, FALSE);
@@ -1783,11 +1791,8 @@ gst_framebuffersink_set_caps (GstBaseSink * sink, GstCaps * caps)
       dst_video_rectangle.h = framebuffersink->requested_video_height;
     /* Correct for aspect ratio if preserve_par property is set. */
     if (framebuffersink->preserve_par) {
-      /* Assume a display pixel aspect ratio of 1:1. */
-      guint display_par_n = 1;
-      guint display_par_d = 1;
       src_video_rectangle.w = gst_util_uint64_scale_round (src_video_rectangle.w,
-          info.par_d * display_par_d, info.par_n * display_par_n);
+          info.par_d * framebuffersink->screen_info.par_d, info.par_n * framebuffersink->screen_info.par_n);
       GST_DEBUG_OBJECT (framebuffersink, "Source video rectangle after correction of size (%u, %u)",
           src_video_rectangle.w, src_video_rectangle.h);
       /* Insert black boxes if necessary. */
