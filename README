@@ -214,7 +214,8 @@ For drmsink:
   are only allocated when they are mapped for the first time. This seems to
   solve the out-of-video-memory issues.
 
-- The preserve-par property is currently disabled. Because we can't rely on
-  changing hardware scaling parameters when set_caps is called (as is done is
-  elements like xvimagesink), we would need to inform upstream to do the
-  appropriate scaling during caps negotiation (get_caps).
+- The preserve-par property currently only works when hardware scaling is
+  possible (e.g. sunxifbsink). When hardware scaling is not available, we
+  cannot change the display out size when set_caps is called; we would need
+  to inform upstream to do the appropriate scaling during caps negotiation
+  (get_caps).
