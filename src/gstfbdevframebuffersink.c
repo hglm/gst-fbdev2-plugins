@@ -436,7 +436,16 @@ gst_fbdevframebuffersink_pan_display (GstFramebufferSink *framebuffersink, GstMe
   GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
   GstMapInfo mapinfo;
   int y;
-  gst_memory_map (memory, &mapinfo, 0);
+  gboolean res;
+
+  mapinfo.data = NULL;
+  res = gst_memory_map (memory, &mapinfo, 0);
+  if (!res || mapinfo.data == NULL) {
+    GST_ERROR_OBJECT (framebuffersink, "Could not map video memory for pan operation");
+    if (res)
+      gst_memory_unmap (memory, &mapinfo);
+    return;
+  }
   y = (mapinfo.data - fbdevframebuffersink->framebuffer) /
       fbdevframebuffersink->fixinfo.line_length;
   gst_fbdevframebuffersink_pan_display_fbdev (fbdevframebuffersink, 0, y);

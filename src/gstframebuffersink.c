@@ -611,20 +611,38 @@ gst_framebuffersink_get_property (GObject * object, guint property_id,
 static void
 gst_framebuffersink_clear_screen (GstFramebufferSink *framebuffersink, int index) {
   GstMapInfo mapinfo;
-  gst_memory_map (framebuffersink->screens[index], &mapinfo, GST_MAP_WRITE);
+  gboolean res;
+
+  mapinfo.data = NULL;
+  res = gst_memory_map (framebuffersink->screens[index], &mapinfo, GST_MAP_WRITE);
+  if (!res || mapinfo.data == NULL) {
+    GST_ERROR_OBJECT (framebuffersink, "Could not map video memory");
+    if (res)
+      gst_memory_unmap (framebuffersink->screens[index], &mapinfo);
+    return;
+  }
   memset (mapinfo.data, 0, mapinfo.size);
   gst_memory_unmap (framebuffersink->screens[index], &mapinfo);
 }
 
 static void
-gst_framebuffersink_put_image_memcpy (GstFramebufferSink *framebuffersink, uint8_t * src)
+gst_framebuffersink_put_image_memcpy (GstFramebufferSink *framebuffersink, uint8_t *src)
 {
   guint8 *dest;
   guintptr dest_stride;
   int i;
   GstMapInfo mapinfo;
+  gboolean res;
 
-  gst_memory_map (framebuffersink->screens[framebuffersink->current_framebuffer_index], &mapinfo, GST_MAP_WRITE);
+  mapinfo.data = NULL;
+  res = gst_memory_map (framebuffersink->screens[framebuffersink->current_framebuffer_index],
+      &mapinfo, GST_MAP_WRITE);
+  if (!res || mapinfo.data == NULL) {
+    GST_ERROR_OBJECT (framebuffersink, "Could not map video memory");
+    if (res)
+      gst_memory_unmap (framebuffersink->screens[framebuffersink->current_framebuffer_index], &mapinfo);
+    return;
+  }
   dest = mapinfo.data;
   dest += framebuffersink->video_rectangle.y * GST_VIDEO_INFO_COMP_STRIDE (&framebuffersink->screen_info, 0)
       + framebuffersink->video_rectangle.x * GST_VIDEO_INFO_COMP_PSTRIDE (&framebuffersink->screen_info, 0);
@@ -648,7 +666,16 @@ gst_framebuffersink_put_overlay_image_memcpy(GstFramebufferSink *framebuffersink
   GstFramebufferSinkClass *klass = GST_FRAMEBUFFERSINK_GET_CLASS (framebuffersink);
   uint8_t *framebuffer_address;
   GstMapInfo mapinfo;
-  gst_memory_map (vmem, &mapinfo, GST_MAP_WRITE);
+  gboolean res;
+
+  mapinfo.data = NULL;
+  res = gst_memory_map (vmem, &mapinfo, GST_MAP_WRITE);
+  if (!res || mapinfo.data == NULL) {
+    GST_ERROR_OBJECT (framebuffersink, "Could not map video memory");
+    if (res)
+      gst_memory_unmap (vmem, &mapinfo);
+    return;
+  }
   framebuffer_address = mapinfo.data;
   if (framebuffersink->overlay_alignment_is_native)
     memcpy(framebuffer_address, src, framebuffersink->video_info.size);
@@ -2098,9 +2125,12 @@ gst_framebuffersink_stop (GstBaseSink * sink)
   return TRUE;
 }
 
-/* In non-overlay mode, there are two different show frame functions, */
-/* one copying frames from memory to video memory, and one that just  */
-/* pans to the frame that has already been  streamed into video memory. */
+/* The show frame function can deal with both video memory buffers
+   that require a pan and with regular buffers that need to be memcpy-ed.
+   There are seperate show_frame functions for overlays (with a video memory
+   or a system memory buffer pool), screen buffers with buffer 
+   pool in video memory, and screen buffers with a buffer pool in
+   system memory. */
 
 static GstFlowReturn
 gst_framebuffersink_show_frame_memcpy (GstFramebufferSink *framebuffersink, GstBuffer *buffer) {
@@ -2109,10 +2139,9 @@ gst_framebuffersink_show_frame_memcpy (GstFramebufferSink *framebuffersink, GstB
   GstMemory *mem;
 
   mem = gst_buffer_get_memory (buffer, 0);
-  gst_memory_map(mem, &mapinfo, GST_MAP_READ);
-  if (mapinfo.data == NULL) {
+  if (!gst_memory_map(mem, &mapinfo, GST_MAP_READ)) {
     GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
-        "memory_map failed; out of video memory?");
+        "memory_map of system memory buffer for reading failed");
     gst_memory_unref (mem);
     return GST_FLOW_ERROR;
   }
@@ -2139,13 +2168,6 @@ gst_framebuffersink_show_frame_memcpy (GstFramebufferSink *framebuffersink, GstB
 
   return GST_FLOW_OK;
 }
-
-/* The show frame function can deal with both video memory buffers
-   that require a pan and with regular buffers that need to be memcpy-ed.
-   There are seperate show_frame functions for overlays (with a video memory
-   or a system memory buffer pool), screen buffers with buffer 
-   pool in video memory, and screen buffers with a buffer pool in
-   system memory. */
 
 static GstFlowReturn
 gst_framebuffersink_show_frame_buffer_pool (GstFramebufferSink * framebuffersink,
@@ -2222,7 +2244,12 @@ GstBuffer * buf)
     GST_LOG_OBJECT (framebuffersink, "Non-video memory overlay buffer encountered, mem = %p",
         mem);
 
-    gst_memory_map(mem, &mapinfo, GST_MAP_READ);
+    if (!gst_memory_map(mem, &mapinfo, GST_MAP_READ)) {
+      GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
+          "memory_map of system memory buffer for reading failed");
+      gst_memory_unref (mem);
+      return GST_FLOW_ERROR;
+    }
 
     if (framebuffersink->use_buffer_pool) {
       /* When using a buffer pool in video memory, being requested to show an overlay
