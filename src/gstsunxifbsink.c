@@ -142,6 +142,9 @@ static GstVideoFormat *gst_sunxifbsink_get_supported_overlay_formats (GstFramebu
 static void gst_sunxifbsink_get_overlay_alignment_restrictions (GstFramebufferSink *framebuffersink,
     GstVideoFormat format, int *overlay_alignment, int *overlay_scanline_alignment,
     int *overlay_plane_alignment, gboolean *overlay_scanline_alignment_is_fixed);
+static gboolean gst_sunxifbsink_get_overlay_video_alignment (GstFramebufferSink *framebuffersink,
+    GstVideoInfo *video_info, GstFramebufferSinkOverlayVideoAlignment *video_alignment, gint *overlay_align,
+    gboolean *video_alignment_matches);
 static gboolean gst_sunxifbsink_prepare_overlay (GstFramebufferSink *framebuffersink, GstVideoFormat format);
 static GstFlowReturn gst_sunxifbsink_show_overlay (GstFramebufferSink *framebuffersink,
     GstMemory *memory);
@@ -224,8 +227,12 @@ gst_sunxifbsink_class_init (GstSunxifbsinkClass* klass)
   framebuffer_sink_class->open_hardware = GST_DEBUG_FUNCPTR (gst_sunxifbsink_open_hardware);
   framebuffer_sink_class->close_hardware = GST_DEBUG_FUNCPTR (gst_sunxifbsink_close_hardware);
   framebuffer_sink_class->get_supported_overlay_formats = GST_DEBUG_FUNCPTR (gst_sunxifbsink_get_supported_overlay_formats);
+#if 0
   framebuffer_sink_class->get_overlay_alignment_restrictions = GST_DEBUG_FUNCPTR (
       gst_sunxifbsink_get_overlay_alignment_restrictions);
+#endif
+  framebuffer_sink_class->get_overlay_video_alignment = GST_DEBUG_FUNCPTR (
+      gst_sunxifbsink_get_overlay_video_alignment);
   framebuffer_sink_class->prepare_overlay = GST_DEBUG_FUNCPTR (gst_sunxifbsink_prepare_overlay);
   framebuffer_sink_class->show_overlay = GST_DEBUG_FUNCPTR (gst_sunxifbsink_show_overlay);
 }
@@ -308,6 +315,8 @@ gst_sunxifbsink_get_supported_overlay_formats (GstFramebufferSink *framebuffersi
   return sunxifbsink_supported_overlay_formats_table;
 }
 
+#if 0
+
 static void gst_sunxifbsink_get_overlay_alignment_restrictions (GstFramebufferSink *framebuffersink,
 GstVideoFormat format, int *overlay_alignment, int *overlay_scanline_alignment,
 int *overlay_plane_alignment, gboolean *overlay_scanline_alignment_is_fixed)
@@ -318,18 +327,41 @@ int *overlay_plane_alignment, gboolean *overlay_scanline_alignment_is_fixed)
   *overlay_scanline_alignment_is_fixed = TRUE;
 }
 
-#define SIMD_ALIGN(s) (((s) + 15) & ~15)
+#endif
 
-/* For the prepare overlay and show overlay functions, the parameters are */
-/* stored in the following fields: */
-/* framebuffersink->overlay_plane_offset[i] is the offset in bytes of each plane. */
-/* framebuffersink->overlay_scanline_stride[i] is the scanline stride in bytes of each plane. */
-/* framebuffersink->videosink.width is the source width. */
-/* framebuffersink->videosink.height is the source height. */
-/* framebuffersink->video_rectangle.x is the destination x coordinate. */
-/* framebuffersink->video_rectangle.y is the destination y coordinate. */
-/* framebuffersink->video_rectangle.w is the destination width. */
-/* framebuffersink->video_rectangle.h is the destination height. */
+/* Return the video alignment (top/bottom/left/right padding and stride alignment for each plane) that
+   is required to display the overlay described by video_info. Also returns the alignment requirement
+   of the start address of the overlay in video memory. video_alignment_matches is set to TRUE if
+   the alignment defined by video_info did not have to be adjusted, FALSE otherwise. The function
+   returns TRUE if hardware overlay with given video info is supported, FALSE otherwise. */
+
+gboolean
+gst_sunxifbsink_get_overlay_video_alignment(GstFramebufferSink *framebuffersink, GstVideoInfo *video_info,
+    GstFramebufferSinkOverlayVideoAlignment *video_alignment, gint *overlay_align,
+    gboolean *video_alignment_matches)
+{
+   *overlay_align = 15;
+   /* Require scanlines to aligned to 16-byte boundaries. */
+   gst_framebuffersink_set_overlay_video_alignment_from_scanline_alignment (framebuffersink, video_info,
+       15, video_alignment, video_alignment_matches);
+   return TRUE;
+}
+
+/*
+ * For the prepare overlay and show overlay functions, the parameters are
+ * stored in the following fields:
+ * framebuffersink->overlay_plane_offset[i] is the offset in bytes of each plane. Any
+ *   top or left padding returned by get_overlay_video_alignment() will come first.
+ * framebuffersink->overlay_scanline_offset[i] is the offset in bytes of the first pixel of each
+ *   scanline for each plane (coresponding with the left padding * bytes per pixel). Usually 0.
+ * framebuffersink->overlay_scanline_stride[i] is the scanline stride in bytes of each plane.
+ * framebuffersink->videosink.width is the source width.
+ * framebuffersink->videosink.height is the source height.
+ * framebuffersink->video_rectangle.x is the destination x coordinate.
+ * framebuffersink->video_rectangle.y is the destination y coordinate.
+ * framebuffersink->video_rectangle.w is the destination width.
+ * framebuffersink->video_rectangle.h is the destination height.
+ */
 
 static gboolean
 gst_sunxifbsink_prepare_overlay (GstFramebufferSink *framebuffersink, GstVideoFormat format)

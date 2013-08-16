@@ -27,6 +27,19 @@
 
 G_BEGIN_DECLS
 
+
+/* We can't reuse GstVideoAlignment because the horizontal padding might be different
+   for different planes. */
+typedef struct _GstFramebufferSinkOverlayVideoAlignment GstFramebufferSinkOverlayVideoAlignment;
+
+struct _GstFramebufferSinkOverlayVideoAlignment {
+  guint padding_top;
+  guint padding_bottom;
+  guint padding_left[GST_VIDEO_MAX_PLANES];
+  guint padding_right[GST_VIDEO_MAX_PLANES];
+  guint stride_align[GST_VIDEO_MAX_PLANES];
+};
+
 /* Main class. */
 
 #define GST_TYPE_FRAMEBUFFERSINK   (gst_framebuffersink_get_type())
@@ -74,11 +87,6 @@ struct _GstFramebufferSink
   int current_framebuffer_index;
   int current_overlay_index;
   int scaled_width, scaled_height;
-  /* Overlay alignment restrictions. */
-  int overlay_alignment;
-  int overlay_scanline_alignment;
-  int overlay_plane_alignment;
-  gboolean overlay_scanline_alignment_is_fixed;
   /* Video memory allocation management. */
   GstAllocator *screen_video_memory_allocator;
   GstAllocationParams *screen_allocation_params;
@@ -98,8 +106,11 @@ struct _GstFramebufferSink
   /* Precalculated video rectangle width * framebuffer bytes per pixel. */
   int video_rectangle_width_in_bytes;
 
+  /* Overlay alignment restriction in video memory. */
+  gint overlay_align;
   /* Actual overlay organization in video memory for each plane. */
   int overlay_plane_offset[4];
+  int overlay_scanline_offset[4];
   int overlay_scanline_stride[4];
   int overlay_size;
   /* Whether the video format provided by GStreamer matches the native */
@@ -134,6 +145,14 @@ struct _GstFramebufferSinkClass
   void (*get_overlay_alignment_restrictions) (GstFramebufferSink *framebuffersink, GstVideoFormat format,
       int *overlay_alignment, int *overlay_scanline_alignment, int *overlay_plane_alignment,
       gboolean *overlay_scanline_alignment_is_fixed);
+  /* Return the video alignment (top/bottom/left/right padding and stride alignment for each plane) that
+     is required to display the overlay described by video_info. Also returns the alignment requirement
+     of the start address of the overlay in video memory. video_alignment_matches is set to TRUE if
+     the alignment defined by video_info did not have to be adjusted, FALSE otherwise. The function
+     returns TRUE if hardware overlay with given video info is supported, FALSE otherwise. */
+  gboolean (*get_overlay_video_alignment) (GstFramebufferSink *framebuffersink, GstVideoInfo *video_info,
+      GstFramebufferSinkOverlayVideoAlignment *video_alignment, gint *overlay_align,
+      gboolean *video_alignment_matches);
   gboolean (*prepare_overlay) (GstFramebufferSink *framebuffersink, GstVideoFormat format);
   GstFlowReturn (*show_overlay) (GstFramebufferSink *framebuffersink, GstMemory *memory);
   GstAllocator * (*video_memory_allocator_new) (GstFramebufferSink *framebuffersink,
@@ -143,6 +162,12 @@ struct _GstFramebufferSinkClass
 GType gst_framebuffersink_get_type (void);
 
 #define GST_MEMORY_FLAG_VIDEO_MEMORY GST_MEMORY_FLAG_LAST
+
+/* Utility function. */
+
+void gst_framebuffersink_set_overlay_video_alignment_from_scanline_alignment (
+    GstFramebufferSink *framebuffersink, GstVideoInfo *video_info, gint scanline_align,
+    GstFramebufferSinkOverlayVideoAlignment *video_alignment, gboolean *video_alignment_matches);
 
 G_END_DECLS
 

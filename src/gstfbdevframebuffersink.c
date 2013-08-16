@@ -474,7 +474,7 @@ GstAllocationParams *allocation_params, gboolean is_pannable, gboolean is_overla
   allocation_params->prefix = 0;
   allocation_params->padding = 0;
   if (is_overlay)
-    allocation_params->align = fbdevframebuffersink->framebuffersink.overlay_alignment;
+    allocation_params->align = fbdevframebuffersink->framebuffersink.overlay_align;
   else if (is_pannable) {
     /* Determine the minimum alignment of the framebuffer screen pages. */
     /* The minimum guaranteed alignment is word-aligned (align = 3). */
