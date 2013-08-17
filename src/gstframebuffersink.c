@@ -1059,14 +1059,13 @@ gst_framebuffersink_caps_set_preferences (GstFramebufferSink *framebuffersink, G
 {
   /* If hardware scaling is supported, and a specific video size is requested, allow any reasonable size */
   /* (except when the width/height_before_scaler properties are set) and use the scaler. */
-  if ((framebuffersink->requested_video_width != 0 || framebuffersink->requested_video_height != 0)
-      && gst_framebuffersink_video_format_supported_by_overlay (framebuffersink,
-      GST_VIDEO_INFO_FORMAT (&framebuffersink->screen_info))) {
+  if (framebuffersink->use_hardware_overlay &&
+      (framebuffersink->requested_video_width != 0 || framebuffersink->requested_video_height != 0)) {
     if (framebuffersink->width_before_scaling != 0)
       gst_caps_set_simple (caps, "width", G_TYPE_INT, framebuffersink->width_before_scaling, NULL);
     else
-       gst_caps_set_simple (caps, "width", GST_TYPE_INT_RANGE, 1,
-           GST_VIDEO_INFO_WIDTH (&framebuffersink->screen_info), NULL);
+      gst_caps_set_simple (caps, "width", GST_TYPE_INT_RANGE, 1,
+          GST_VIDEO_INFO_WIDTH (&framebuffersink->screen_info), NULL);
     if (framebuffersink->height_before_scaling != 0)
       gst_caps_set_simple (caps, "height", G_TYPE_INT, framebuffersink->height_before_scaling, NULL);
     else

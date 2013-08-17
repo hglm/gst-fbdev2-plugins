@@ -189,6 +189,8 @@ YV12	Planar 4:2:0 YUV (U and V planes swapped)
 NV12	Planar 4:2:0 YUV (U and V planes combined)
 NV21	Planar 4:2:0 YUV (U and V planes combined, U and V swapped)
 
+Hardware overlays work in both 32bpp (BGRx) and 16bpp (RGB16) framebuffer modes.
+
 *** Troubleshooting ***
 
 Additional debug messages can be enabled with the generic GStreamer command

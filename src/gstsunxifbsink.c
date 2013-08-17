@@ -233,10 +233,6 @@ gst_sunxifbsink_class_init (GstSunxifbsinkClass* klass)
   framebuffer_sink_class->open_hardware = GST_DEBUG_FUNCPTR (gst_sunxifbsink_open_hardware);
   framebuffer_sink_class->close_hardware = GST_DEBUG_FUNCPTR (gst_sunxifbsink_close_hardware);
   framebuffer_sink_class->get_supported_overlay_formats = GST_DEBUG_FUNCPTR (gst_sunxifbsink_get_supported_overlay_formats);
-#if 0
-  framebuffer_sink_class->get_overlay_alignment_restrictions = GST_DEBUG_FUNCPTR (
-      gst_sunxifbsink_get_overlay_alignment_restrictions);
-#endif
   framebuffer_sink_class->get_overlay_video_alignment = GST_DEBUG_FUNCPTR (
       gst_sunxifbsink_get_overlay_video_alignment);
   framebuffer_sink_class->prepare_overlay = GST_DEBUG_FUNCPTR (gst_sunxifbsink_prepare_overlay);
@@ -344,6 +340,8 @@ gst_sunxifbsink_get_overlay_video_alignment(GstFramebufferSink *framebuffersink,
          area, related to the alignment requirements of the width. */
       return FALSE;
   }
+  /* When uses other formats, some artifacts have been observed when the width is odd, but for now
+     leave support for odd widths enabled. */
   *overlay_align = 15;
   /* For the Allwinner hardware overlay, scanlines need to be aligned to pixel boundaries with a minimum
      alignment of word-aligned. This is a good match for the buffer format generally provided by
