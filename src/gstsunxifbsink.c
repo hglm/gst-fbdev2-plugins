@@ -272,12 +272,12 @@ gst_sunxifbsink_open_hardware (GstFramebufferSink *framebuffersink,
       video_memory_size, pannable_video_memory_size))
     return FALSE;
 
-  sunxifbsink->fd_disp = open ("/dev/disp", O_RDWR);
-
   sunxifbsink->hardware_overlay_available = FALSE;
 
   if (framebuffersink->use_hardware_overlay == FALSE)
     return TRUE;
+
+  sunxifbsink->fd_disp = open ("/dev/disp", O_RDWR);
 
   if (sunxifbsink->fd_disp < 0)
     return TRUE;
@@ -317,11 +317,12 @@ gst_sunxifbsink_close_hardware (GstFramebufferSink *framebuffersink) {
 
   if (sunxifbsink->hardware_overlay_available) {
     gst_sunxifbsink_hide_layer(sunxifbsink);
-
     gst_sunxifbsink_release_layer(sunxifbsink);
-
-    close(sunxifbsink->fd_disp);
   }
+  /* Before calling close_hardware, use_hardware_overlay is expected to have
+     been reset to the original value it had when open_hardware was called. */
+  if (framebuffersink->use_hardware_overlay)
+    close(sunxifbsink->fd_disp);
 
   gst_fbdevframebuffersink_close_hardware (framebuffersink);
 }

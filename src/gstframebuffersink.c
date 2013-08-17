@@ -379,11 +379,11 @@ gst_framebuffersink_init (GstFramebufferSink *framebuffersink) {
   framebuffersink->height_before_scaling = 0;
   framebuffersink->clear = TRUE;
   framebuffersink->fps = 0;
-  framebuffersink->use_buffer_pool = FALSE;
-  framebuffersink->vsync = TRUE;
+  framebuffersink->use_buffer_pool_property = FALSE;
+  framebuffersink->vsync_property = TRUE;
   framebuffersink->flip_buffers = 0;
   framebuffersink->pan_does_vsync = FALSE;
-  framebuffersink->use_hardware_overlay = TRUE;
+  framebuffersink->use_hardware_overlay_property = TRUE;
 #ifdef INCLUDE_PRESERVE_PAR_PROPERTY
   /* When the preserve_par property is available, it will default true. */
   framebuffersink->preserve_par = TRUE;
@@ -436,7 +436,7 @@ gst_framebuffersink_get_supported_overlay_formats (GstFramebufferSink *
   return overlay_formats_supported_table_empty;
 }
 
-/* Default implementation of get_video_memory_allocator. */
+/* Default implementation of video_memory_allocator_new. */
 
 static GstAllocator *gst_framebuffersink_video_memory_allocator_new (
     GstFramebufferSink *framebuffersink, GstVideoInfo *info, gboolean pannable,
@@ -517,10 +517,10 @@ gst_framebuffersink_set_property (GObject * object, guint property_id,
       framebuffersink->fps = g_value_get_int (value);
       break;
     case PROP_BUFFER_POOL:
-      framebuffersink->use_buffer_pool = g_value_get_boolean (value);
+      framebuffersink->use_buffer_pool_property = g_value_get_boolean (value);
       break;
     case PROP_VSYNC:
-      framebuffersink->vsync = g_value_get_boolean (value);
+      framebuffersink->vsync_property = g_value_get_boolean (value);
       break;
     case PROP_FLIP_BUFFERS:
       framebuffersink->flip_buffers = g_value_get_int (value);
@@ -529,7 +529,7 @@ gst_framebuffersink_set_property (GObject * object, guint property_id,
       framebuffersink->pan_does_vsync = g_value_get_boolean (value);
       break;
     case PROP_USE_HARDWARE_OVERLAY:
-      framebuffersink->use_hardware_overlay = g_value_get_boolean (value);
+      framebuffersink->use_hardware_overlay_property = g_value_get_boolean (value);
       break;
     case PROP_MAX_VIDEO_MEMORY_USED:
       framebuffersink->max_video_memory_property = g_value_get_int (value);
@@ -606,10 +606,10 @@ gst_framebuffersink_get_property (GObject * object, guint property_id,
       g_value_set_int (value, framebuffersink->fps);
       break;
     case PROP_BUFFER_POOL:
-      g_value_set_boolean (value, framebuffersink->use_buffer_pool);
+      g_value_set_boolean (value, framebuffersink->use_buffer_pool_property);
       break;
     case PROP_VSYNC:
-      g_value_set_boolean (value, framebuffersink->vsync);
+      g_value_set_boolean (value, framebuffersink->vsync_property);
       break;
     case PROP_FLIP_BUFFERS:
       g_value_set_int (value, framebuffersink->flip_buffers);
@@ -618,7 +618,7 @@ gst_framebuffersink_get_property (GObject * object, guint property_id,
       g_value_set_boolean (value, framebuffersink->pan_does_vsync);
       break;
     case PROP_USE_HARDWARE_OVERLAY:
-      g_value_set_boolean (value, framebuffersink->use_hardware_overlay);
+      g_value_set_boolean (value, framebuffersink->use_hardware_overlay_property);
       break;
     case PROP_MAX_VIDEO_MEMORY_USED:
       g_value_set_int (value, framebuffersink->max_video_memory_property);
@@ -1040,6 +1040,7 @@ gst_framebuffersink_benchmark (GstFramebufferSink *framebuffersink)
      gst_allocator_free (default_allocator, system_buffers[i]);
 
   gst_allocator_free (default_allocator, source_buffer);
+  gst_object_unref (default_allocator);
 
   for (i = 0; i < n; i++)
       gst_allocator_free (framebuffersink->screen_video_memory_allocator,
@@ -1061,6 +1062,13 @@ gst_framebuffersink_start (GstBaseSink *sink)
   gchar s[256];
 
   GST_DEBUG_OBJECT (framebuffersink, "start");
+
+  framebuffersink->use_hardware_overlay =
+      framebuffersink->use_hardware_overlay_property;
+  framebuffersink->use_buffer_pool =
+      framebuffersink->use_buffer_pool_property;
+  framebuffersink->vsync =
+      framebuffersink->vsync_property;
 
   if (!klass->open_hardware (framebuffersink, &framebuffersink->screen_info,
       &framebuffersink->video_memory_size,
@@ -1097,6 +1105,7 @@ gst_framebuffersink_start (GstBaseSink *sink)
   framebuffersink->screen_video_memory_allocator =
       klass->video_memory_allocator_new (framebuffersink,
       &framebuffersink->screen_info, TRUE, FALSE);
+  framebuffersink->overlay_video_memory_allocator = NULL;
 
   /* Perform benchmarks if requested. */
   if (framebuffersink->benchmark)
@@ -2100,6 +2109,20 @@ gst_framebuffersink_reset (GstFramebufferSink *framebuffersink)
     gst_object_unref (framebuffersink->caps);
     framebuffersink->caps = NULL;
   }
+
+  /* Reset variables derived from properties. */
+  framebuffersink->use_hardware_overlay =
+      framebuffersink->use_hardware_overlay_property;
+  framebuffersink->use_buffer_pool =
+      framebuffersink->use_buffer_pool_property;
+  framebuffersink->vsync =
+      framebuffersink->vsync_property;
+
+  /* Free the overlay video memory allocator if present. */
+  if (framebuffersink->overlay_video_memory_allocator) {
+    g_object_unref (framebuffersink->overlay_video_memory_allocator);
+    framebuffersink->overlay_video_memory_allocator = NULL;
+  }
 }
 
 /* The stop function should release resources. */
@@ -2127,9 +2150,14 @@ gst_framebuffersink_stop (GstBaseSink * sink)
 
   gst_framebuffersink_reset (framebuffersink);
 
+  /* Free the screen allocator. */
+  g_object_unref (framebuffersink->screen_video_memory_allocator);
+
   klass->close_hardware (framebuffersink);
 
-  g_free (framebuffersink->device);
+  /* The device property string should probably not be freed because start
+     may be called again. */
+  /* g_free (framebuffersink->device); */
 
   return TRUE;
 }
@@ -2484,11 +2512,14 @@ gst_framebuffersink_propose_allocation (GstBaseSink * bsink, GstQuery * query)
     config = gst_buffer_pool_get_config (pool);
     gst_buffer_pool_config_set_params (config, caps, info.size, 2, 0);
     gst_buffer_pool_config_set_allocator (config, allocator, NULL);
-    if (!gst_buffer_pool_set_config (pool, config))
+    if (!gst_buffer_pool_set_config (pool, config)) {
+      gst_object_unref (allocator);
       goto config_failed;
+    }
 
     gst_query_add_allocation_param (query, allocator, NULL);
     gst_query_add_allocation_pool (query, pool, info.size, 2, 0);
+    gst_object_unref (allocator);
     gst_object_unref (pool);
   }
 

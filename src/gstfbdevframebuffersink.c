@@ -111,6 +111,7 @@ static void gst_fbdevframebuffersink_pan_display_fbdev (
 /* Standard video memory implementation. */
 static void gst_fbdevframebuffersink_video_memory_init (gpointer framebuffer,
     gsize map_size);
+static void gst_fbdevframebuffersink_video_memory_finalize ();
 
 enum
 {
@@ -439,6 +440,9 @@ gst_fbdevframebuffersink_close_hardware (GstFramebufferSink *framebuffersink)
 
   GST_OBJECT_LOCK (fbdevframebuffersink);
 
+  /* Video memory buffers should already be freed. */
+  gst_fbdevframebuffersink_video_memory_finalize ();
+
   gst_fbdevframebuffersink_pan_display_fbdev(fbdevframebuffersink, 0, 0);
 
   if (munmap (fbdevframebuffersink->framebuffer,
@@ -652,6 +656,14 @@ gsize framebuffer_size)
   video_memory_storage->total_allocated = 0;
   video_memory_storage->end_marker = 0;
   video_memory_storage->chain = NULL;
+}
+
+static void
+gst_fbdevframebuffersink_video_memory_finalize ()
+{
+  gst_mini_object_unref (GST_MINI_OBJECT_CAST (video_memory_storage));
+  g_slice_free (GstFbdevFramebufferSinkVideoMemoryStorage,
+     video_memory_storage);
 }
 
 /* Video memory allocator implementation that uses fbdev video memory. */

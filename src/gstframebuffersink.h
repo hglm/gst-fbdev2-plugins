@@ -66,21 +66,27 @@ struct _GstFramebufferSink
   gboolean silent;
   gchar *device;
   gboolean full_screen;
-  gboolean use_hardware_overlay;
+  gboolean use_hardware_overlay_property;
   gboolean clear;
   gint requested_video_width;
   gint requested_video_height;
   gint width_before_scaling;
   gint height_before_scaling;
   gint fps;
-  gboolean use_buffer_pool;
-  gboolean vsync;
+  gboolean use_buffer_pool_property;
+  gboolean vsync_property;
   gint flip_buffers;
   gboolean pan_does_vsync;
   gboolean preserve_par;
   gint max_video_memory_property;
   gchar *preferred_overlay_format_str;
   gboolean benchmark;
+
+  /* Variables (derived from properties) that may be altered when
+     the element starts processing a stream. */
+  gboolean use_hardware_overlay;
+  gboolean use_buffer_pool;
+  gboolean vsync;
 
   /* Invariant device parameters. */
   GstVideoInfo screen_info;
