@@ -28,11 +28,15 @@ G_BEGIN_DECLS
 
 /* Main class. */
 
-#define GST_TYPE_DRMSINK   (gst_drmsink_get_type())
-#define GST_DRMSINK(obj)   (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_DRMSINK,GstDrmsink))
-#define GST_DRMSINK_CLASS(klass)   (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_DRMSINK,GstDrmsinkClass))
-#define GST_IS_DRMSINK(obj)   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_DRMSINK))
-#define GST_IS_DRMSINK_CLASS(obj)   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_DRMSINK))
+#define GST_TYPE_DRMSINK (gst_drmsink_get_type ())
+#define GST_DRMSINK(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), \
+    GST_TYPE_DRMSINK, GstDrmsink))
+#define GST_DRMSINK_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), \
+    GST_TYPE_DRMSINK,GstDrmsinkClass))
+#define GST_IS_DRMSINK(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), \
+    GST_TYPE_DRMSINK))
+#define GST_IS_DRMSINK_CLASS(obj) (G_TYPE_CHECK_CLASS_TYPE ((klass), \
+    GST_TYPE_DRMSINK))
 
 typedef struct _GstDrmsink GstDrmsink;
 typedef struct _GstDrmsinkClass GstDrmsinkClass;

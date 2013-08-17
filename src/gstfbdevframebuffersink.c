@@ -75,10 +75,10 @@
 GST_DEBUG_CATEGORY_STATIC (gst_fbdevframebuffersink_debug_category);
 #define GST_CAT_DEFAULT gst_fbdevframebuffersink_debug_category
 
-/* Function to produce informational message if silent property is not set; */
-/* if the silent property is enabled only debugging info is produced. */
-static void GST_FBDEVFRAMEBUFFERSINK_MESSAGE_OBJECT (GstFbdevFramebufferSink *fbdevframebuffersink,
-const gchar *message) {
+/* Function to produce informational message if silent property is not set;
+   if the silent property is enabled only debugging info is produced. */
+static void GST_FBDEVFRAMEBUFFERSINK_MESSAGE_OBJECT (
+    GstFbdevFramebufferSink *fbdevframebuffersink, const gchar *message) {
   if (!fbdevframebuffersink->framebuffersink.silent)
     g_print ("%s.\n", message);
   GST_INFO_OBJECT (fbdevframebuffersink, message);
@@ -99,16 +99,18 @@ static void gst_fbdevframebuffersink_get_property (GObject * object,
 static GstAllocator *gst_fbdevframebuffersink_video_memory_allocator_new (
     GstFramebufferSink *framebuffersink, GstVideoInfo *info, gboolean pannable,
     gboolean is_overlay);
-static void gst_fbdevframebuffersink_pan_display (GstFramebufferSink *framebuffersink,
-    GstMemory *memory);
-static void gst_fbdevframebuffersink_wait_for_vsync (GstFramebufferSink *framebuffersink);
+static void gst_fbdevframebuffersink_pan_display (
+    GstFramebufferSink *framebuffersink, GstMemory *memory);
+static void gst_fbdevframebuffersink_wait_for_vsync (
+    GstFramebufferSink *framebuffersink);
 
 /* Local functions. */
-static void gst_fbdevframebuffersink_pan_display_fbdev (GstFbdevFramebufferSink *fbdevframebuffersink,
-    int x, int y);
+static void gst_fbdevframebuffersink_pan_display_fbdev (
+    GstFbdevFramebufferSink *fbdevframebuffersink, int x, int y);
 
 /* Standard video memory implementation. */
-static void gst_fbdevframebuffersink_video_memory_init (gpointer framebuffer, gsize map_size);
+static void gst_fbdevframebuffersink_video_memory_init (gpointer framebuffer,
+    gsize map_size);
 
 enum
 {
@@ -122,23 +124,29 @@ static void
 gst_fbdevframebuffersink_class_init (GstFbdevFramebufferSinkClass* klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
-  GstFramebufferSinkClass *framebuffer_sink_class = GST_FRAMEBUFFERSINK_CLASS (klass);
+  GstFramebufferSinkClass *framebuffer_sink_class =
+      GST_FRAMEBUFFERSINK_CLASS (klass);
 
   gobject_class->set_property = gst_fbdevframebuffersink_set_property;
   gobject_class->get_property = gst_fbdevframebuffersink_get_property;
 
   g_object_class_install_property (gobject_class, PROP_GRAPHICS_MODE,
-    g_param_spec_boolean ("graphics-mode", "Console graphics mode",
-			  "Set the console to KDGRAPHICS mode. This eliminates interference from "
-                          "text output and the cursor but can result in textmode not being restored "
-                          "in case of a crash. Use with care.",
-                          FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+      g_param_spec_boolean ("graphics-mode", "Console graphics mode",
+      "Set the console to KDGRAPHICS mode. This eliminates interference from "
+      "text output and the cursor but can result in textmode not being "
+      "restored in case of a crash. Use with care.",
+      FALSE, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  framebuffer_sink_class->open_hardware = GST_DEBUG_FUNCPTR (gst_fbdevframebuffersink_open_hardware);
-  framebuffer_sink_class->close_hardware = GST_DEBUG_FUNCPTR (gst_fbdevframebuffersink_close_hardware);
-  framebuffer_sink_class->video_memory_allocator_new = GST_DEBUG_FUNCPTR (gst_fbdevframebuffersink_video_memory_allocator_new);
-  framebuffer_sink_class->pan_display = GST_DEBUG_FUNCPTR (gst_fbdevframebuffersink_pan_display);
-  framebuffer_sink_class->wait_for_vsync = GST_DEBUG_FUNCPTR (gst_fbdevframebuffersink_wait_for_vsync);
+  framebuffer_sink_class->open_hardware =
+      GST_DEBUG_FUNCPTR (gst_fbdevframebuffersink_open_hardware);
+  framebuffer_sink_class->close_hardware =
+      GST_DEBUG_FUNCPTR (gst_fbdevframebuffersink_close_hardware);
+  framebuffer_sink_class->video_memory_allocator_new =
+      GST_DEBUG_FUNCPTR (gst_fbdevframebuffersink_video_memory_allocator_new);
+  framebuffer_sink_class->pan_display =
+      GST_DEBUG_FUNCPTR (gst_fbdevframebuffersink_pan_display);
+  framebuffer_sink_class->wait_for_vsync =
+      GST_DEBUG_FUNCPTR (gst_fbdevframebuffersink_wait_for_vsync);
 }
 
 static void
@@ -152,14 +160,16 @@ gst_fbdevframebuffersink_base_init (gpointer g_class)
 
 static void
 gst_fbdevframebuffersink_init (GstFbdevFramebufferSink *fbdevframebuffersink) {
-  GstFramebufferSink *framebuffersink = GST_FRAMEBUFFERSINK (fbdevframebuffersink);
+  GstFramebufferSink *framebuffersink =
+      GST_FRAMEBUFFERSINK (fbdevframebuffersink);
 
   fbdevframebuffersink->framebuffer = NULL;
 
   /* Set the initial values of the properties.*/
   fbdevframebuffersink->use_graphics_mode = FALSE;
 
-  /* Override the default value of the device property from GstFramebufferSink. */
+  /* Override the default value of the device property from
+     GstFramebufferSink. */
   framebuffersink->device = g_strdup ("/dev/fb0");
 }
 
@@ -167,7 +177,8 @@ static void
 gst_fbdevframebuffersink_set_property (GObject * object, guint property_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (object);
+  GstFbdevFramebufferSink *fbdevframebuffersink =
+      GST_FBDEVFRAMEBUFFERSINK (object);
 
   GST_DEBUG_OBJECT (fbdevframebuffersink, "set_property");
   g_return_if_fail (GST_IS_FBDEVFRAMEBUFFERSINK (object));
@@ -186,7 +197,8 @@ static void
 gst_fbdevframebuffersink_get_property (GObject * object, guint property_id,
     GValue * value, GParamSpec * pspec)
 {
-  GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (object);
+  GstFbdevFramebufferSink *fbdevframebuffersink =
+      GST_FBDEVFRAMEBUFFERSINK (object);
 
   GST_DEBUG_OBJECT (fbdevframebuffersink, "get_property");
   g_return_if_fail (GST_IS_FRAMEBUFFERSINK (object));
@@ -203,16 +215,18 @@ gst_fbdevframebuffersink_get_property (GObject * object, guint property_id,
 
 /* Helper function. */
 static gboolean
-gst_fbdevframebuffersink_set_device_virtual_size(GstFbdevFramebufferSink *fbdevframebuffersink,
-    int xres, int yres)
+gst_fbdevframebuffersink_set_device_virtual_size(GstFbdevFramebufferSink *
+    fbdevframebuffersink, int xres, int yres)
 {
   fbdevframebuffersink->varinfo.xres_virtual = xres;
   fbdevframebuffersink->varinfo.yres_virtual = yres;
   /* Set the variable screen info. */
-  if (ioctl (fbdevframebuffersink->fd, FBIOPUT_VSCREENINFO, &fbdevframebuffersink->varinfo))
+  if (ioctl (fbdevframebuffersink->fd, FBIOPUT_VSCREENINFO,
+      &fbdevframebuffersink->varinfo))
     return FALSE;
   /* Read back test. */
-  ioctl (fbdevframebuffersink->fd, FBIOGET_VSCREENINFO, &fbdevframebuffersink->varinfo);
+  ioctl (fbdevframebuffersink->fd, FBIOGET_VSCREENINFO,
+      &fbdevframebuffersink->varinfo);
   if (fbdevframebuffersink->varinfo.yres_virtual != yres)
     return FALSE;
   return TRUE;
@@ -229,9 +243,11 @@ swapendian (uint32_t val)
 /* The following member function is exported for use by derived subclasses. */
 gboolean
 gst_fbdevframebuffersink_open_hardware (GstFramebufferSink *framebuffersink,
-    GstVideoInfo *info, gsize *video_memory_size, gsize *pannable_video_memory_size)
+    GstVideoInfo *info, gsize *video_memory_size,
+    gsize *pannable_video_memory_size)
 {
-  GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
+  GstFbdevFramebufferSink *fbdevframebuffersink =
+      GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
   struct fb_fix_screeninfo fixinfo;
   struct fb_var_screeninfo varinfo;
   uint32_t rmask;
@@ -262,7 +278,8 @@ gst_fbdevframebuffersink_open_hardware (GstFramebufferSink *framebuffersink,
 
   /* Map the framebuffer. */
   if (framebuffersink->max_video_memory_property == 0)
-    /* Only allocate up to reported virtual size when the video-memory property is 0. */
+    /* Only allocate up to reported virtual size when the video-memory property
+       is 0. */
     fbdevframebuffersink->framebuffer_map_size =
       fixinfo.line_length * varinfo.yres_virtual;
   else if (framebuffersink->max_video_memory_property == - 1) {
@@ -286,7 +303,8 @@ gst_fbdevframebuffersink_open_hardware (GstFramebufferSink *framebuffersink,
       fbdevframebuffersink->framebuffer_map_size = fixinfo.line_length
           * varinfo.yres;
   }
-  fbdevframebuffersink->framebuffer = mmap (0, fbdevframebuffersink->framebuffer_map_size,
+  fbdevframebuffersink->framebuffer = mmap (0,
+      fbdevframebuffersink->framebuffer_map_size,
       PROT_WRITE, MAP_SHARED, fbdevframebuffersink->fd, 0);
   if (fbdevframebuffersink->framebuffer == MAP_FAILED) {
     close (fbdevframebuffersink->fd);
@@ -337,11 +355,12 @@ gst_fbdevframebuffersink_open_hardware (GstFramebufferSink *framebuffersink,
   depth = varinfo.red.length + varinfo.green.length
       + varinfo.blue.length;
 
-  framebuffer_format = gst_video_format_from_masks (depth, varinfo.bits_per_pixel,
-      endianness, rmask, gmask, bmask, 0);
+  framebuffer_format = gst_video_format_from_masks (depth,
+      varinfo.bits_per_pixel, endianness, rmask, gmask, bmask, 0);
 
   gst_video_info_init (info);
-  gst_video_info_set_format (info, framebuffer_format, varinfo.xres, varinfo.yres);
+  gst_video_info_set_format (info, framebuffer_format, varinfo.xres,
+      varinfo.yres);
   gst_video_alignment_reset (&align);
   /* Set alignment to word boundaries. */
   align.stride_align[0] = 3;
@@ -351,13 +370,16 @@ gst_fbdevframebuffersink_open_hardware (GstFramebufferSink *framebuffersink,
   fbdevframebuffersink->varinfo = varinfo;
 
   /* Make sure all framebuffers can be panned to. */
-  max_framebuffers = fbdevframebuffersink->framebuffer_map_size / GST_VIDEO_INFO_SIZE (info);
-  if (fbdevframebuffersink->varinfo.yres_virtual < max_framebuffers * GST_VIDEO_INFO_HEIGHT (info)
+  max_framebuffers = fbdevframebuffersink->framebuffer_map_size /
+      GST_VIDEO_INFO_SIZE (info);
+  if (fbdevframebuffersink->varinfo.yres_virtual < max_framebuffers *
+      GST_VIDEO_INFO_HEIGHT (info)
       && !gst_fbdevframebuffersink_set_device_virtual_size(fbdevframebuffersink,
       fbdevframebuffersink->varinfo.xres_virtual,
       framebuffersink->max_framebuffers * GST_VIDEO_INFO_HEIGHT (info))) {
     GST_FBDEVFRAMEBUFFERSINK_MESSAGE_OBJECT (fbdevframebuffersink,
-        "Could not set the device virtual screen size large enough to support all buffers");
+        "Could not set the device virtual screen size large enough to support "
+        "all buffers");
     *pannable_video_memory_size = fbdevframebuffersink->varinfo.yres_virtual *
         fbdevframebuffersink->fixinfo.line_length;
   }
@@ -370,8 +392,8 @@ gst_fbdevframebuffersink_open_hardware (GstFramebufferSink *framebuffersink,
 
   {
     gchar *s = g_strdup_printf("Succesfully opened fbdev framebuffer device %s, "
-        "mapped sized %.2lf MB of which %.2lf MB (%d buffers) usable for page flipping",
-        framebuffersink->device,
+        "mapped sized %.2lf MB of which %.2lf MB (%d buffers) usable for page "
+        "flipping", framebuffersink->device,
         (double) fbdevframebuffersink->framebuffer_map_size / (1024 * 1024),
         (double) max_framebuffers * fixinfo.line_length *
         GST_VIDEO_INFO_HEIGHT (info) / (1024 * 1024), max_framebuffers);
@@ -388,7 +410,8 @@ gst_fbdevframebuffersink_open_hardware (GstFramebufferSink *framebuffersink,
         goto error_setting_graphics_mode;
     if (ioctl (kd_fd, KDSETMODE, KD_GRAPHICS) < 0)
         goto error_setting_graphics_mode;
-    GST_FBDEVFRAMEBUFFERSINK_MESSAGE_OBJECT (fbdevframebuffersink, "Setting console to KD_GRAPHICS mode");
+    GST_FBDEVFRAMEBUFFERSINK_MESSAGE_OBJECT (fbdevframebuffersink,
+        "Setting console to KD_GRAPHICS mode");
     close (kd_fd);
   }
 
@@ -401,7 +424,8 @@ err:
   return FALSE;
 
 error_setting_graphics_mode:
-  GST_WARNING_OBJECT (fbdevframebuffersink, "Could not set KD mode to KD_GRAPHICS");
+  GST_WARNING_OBJECT (fbdevframebuffersink,
+      "Could not set KD mode to KD_GRAPHICS");
   fbdevframebuffersink->use_graphics_mode = FALSE;
   goto continue_initialization;
 }
@@ -410,13 +434,15 @@ error_setting_graphics_mode:
 void
 gst_fbdevframebuffersink_close_hardware (GstFramebufferSink *framebuffersink)
 {
-  GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
+  GstFbdevFramebufferSink *fbdevframebuffersink =
+      GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
 
   GST_OBJECT_LOCK (fbdevframebuffersink);
 
   gst_fbdevframebuffersink_pan_display_fbdev(fbdevframebuffersink, 0, 0);
 
-  if (munmap (fbdevframebuffersink->framebuffer, fbdevframebuffersink->framebuffer_map_size))
+  if (munmap (fbdevframebuffersink->framebuffer,
+      fbdevframebuffersink->framebuffer_map_size))
     GST_ERROR_OBJECT (fbdevframebuffersink, "Could not unmap video memory");
 
   close (fbdevframebuffersink->fd);
@@ -432,8 +458,11 @@ gst_fbdevframebuffersink_close_hardware (GstFramebufferSink *framebuffersink)
 }
 
 static void
-gst_fbdevframebuffersink_pan_display (GstFramebufferSink *framebuffersink, GstMemory *memory) {
-  GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
+gst_fbdevframebuffersink_pan_display (GstFramebufferSink *framebuffersink,
+    GstMemory *memory)
+{
+  GstFbdevFramebufferSink *fbdevframebuffersink =
+      GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
   GstMapInfo mapinfo;
   int y;
   gboolean res;
@@ -441,7 +470,8 @@ gst_fbdevframebuffersink_pan_display (GstFramebufferSink *framebuffersink, GstMe
   mapinfo.data = NULL;
   res = gst_memory_map (memory, &mapinfo, 0);
   if (!res || mapinfo.data == NULL) {
-    GST_ERROR_OBJECT (framebuffersink, "Could not map video memory for pan operation");
+    GST_ERROR_OBJECT (framebuffersink,
+        "Could not map video memory for pan operation");
     if (res)
       gst_memory_unmap (memory, &mapinfo);
     return;
@@ -454,9 +484,11 @@ gst_fbdevframebuffersink_pan_display (GstFramebufferSink *framebuffersink, GstMe
 
 static void
 gst_fbdevframebuffersink_wait_for_vsync (GstFramebufferSink *framebuffersink) {
-  GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
+  GstFbdevFramebufferSink *fbdevframebuffersink =
+      GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
   if (ioctl (fbdevframebuffersink->fd, FBIO_WAITFORVSYNC, NULL)) {
-    GST_ERROR_OBJECT(fbdevframebuffersink, "FBIO_WAITFORVSYNC call failed. Disabling vsync.");
+    GST_ERROR_OBJECT(fbdevframebuffersink,
+    "FBIO_WAITFORVSYNC call failed. Disabling vsync.");
     framebuffersink->vsync = FALSE;
   }
 }
@@ -465,8 +497,9 @@ gst_fbdevframebuffersink_wait_for_vsync (GstFramebufferSink *framebuffersink) {
 /* screens or overlays. */
 
 static void
-gst_fbdevframebuffersink_allocation_params_init (GstFbdevFramebufferSink *fbdevframebuffersink,
-GstAllocationParams *allocation_params, gboolean is_pannable, gboolean is_overlay)
+gst_fbdevframebuffersink_allocation_params_init (
+    GstFbdevFramebufferSink *fbdevframebuffersink, GstAllocationParams *
+    allocation_params, gboolean is_pannable, gboolean is_overlay)
 {
   int i;
   gst_allocation_params_init(allocation_params);
@@ -474,10 +507,11 @@ GstAllocationParams *allocation_params, gboolean is_pannable, gboolean is_overla
   allocation_params->prefix = 0;
   allocation_params->padding = 0;
   if (is_overlay)
-    allocation_params->align = fbdevframebuffersink->framebuffersink.overlay_align;
+    allocation_params->align =
+        fbdevframebuffersink->framebuffersink.overlay_align;
   else if (is_pannable) {
-    /* Determine the minimum alignment of the framebuffer screen pages. */
-    /* The minimum guaranteed alignment is word-aligned (align = 3). */
+    /* Determine the minimum alignment of the framebuffer screen pages.
+       The minimum guaranteed alignment is word-aligned (align = 3). */
     for (i = 8; i <= 4096; i <<= 1)
       if (fbdevframebuffersink->fixinfo.line_length & (i - 1))
         break;
@@ -488,14 +522,15 @@ GstAllocationParams *allocation_params, gboolean is_pannable, gboolean is_overla
 }
 
 static void
-gst_fbdevframebuffersink_pan_display_fbdev (GstFbdevFramebufferSink *fbdevframebuffersink,
-    int xoffset, int yoffset)
+gst_fbdevframebuffersink_pan_display_fbdev (
+    GstFbdevFramebufferSink *fbdevframebuffersink, int xoffset, int yoffset)
 {
   int old_xoffset = fbdevframebuffersink->varinfo.xoffset;
   int old_yoffset = fbdevframebuffersink->varinfo.yoffset;
   fbdevframebuffersink->varinfo.xoffset = xoffset;
   fbdevframebuffersink->varinfo.yoffset = yoffset;
-  if (ioctl (fbdevframebuffersink->fd, FBIOPAN_DISPLAY, &fbdevframebuffersink->varinfo)) {
+  if (ioctl (fbdevframebuffersink->fd, FBIOPAN_DISPLAY,
+      &fbdevframebuffersink->varinfo)) {
     GST_ERROR_OBJECT (fbdevframebuffersink, "FBIOPAN_DISPLAY call failed");
     fbdevframebuffersink->varinfo.xoffset = old_xoffset;
     fbdevframebuffersink->varinfo.yoffset = old_yoffset;
@@ -546,12 +581,14 @@ static GstMemory *gst_fbdevframebuffersink_video_memory_allocator_alloc_actual (
 #endif
 
 static gpointer
-gst_fbdevframebuffersink_video_memory_map (GstMemory *mem, gsize maxsize, GstMapFlags flags)
+gst_fbdevframebuffersink_video_memory_map (GstMemory *mem, gsize maxsize,
+    GstMapFlags flags)
 {
-  GstFbdevFramebufferSinkVideoMemory *vmem = (GstFbdevFramebufferSinkVideoMemory *)mem;
+  GstFbdevFramebufferSinkVideoMemory *vmem =
+      (GstFbdevFramebufferSinkVideoMemory *)mem;
 #if 1
-  GST_DEBUG ("video_memory_map called, mem = %p, maxsize = %d, flags = %d, data = %p\n", mem,
-      maxsize, flags, vmem->data);
+  GST_DEBUG ("video_memory_map called, mem = %p, maxsize = %d, flags = %d, "
+      "data = %p\n", mem, maxsize, flags, vmem->data);
 
   if (flags & GST_MAP_READ)
     GST_DEBUG ("Mapping video memory for reading is slow.\n");
@@ -559,8 +596,8 @@ gst_fbdevframebuffersink_video_memory_map (GstMemory *mem, gsize maxsize, GstMap
 
 #ifdef LAZY_ALLOCATION
   if (!vmem->allocated) {
-    if (!gst_fbdevframebuffersink_video_memory_allocator_alloc_actual (mem->allocator,
-        mem->maxsize, NULL, vmem))
+    if (!gst_fbdevframebuffersink_video_memory_allocator_alloc_actual (
+        mem->allocator, mem->maxsize, NULL, vmem))
       return NULL;
     vmem->allocated = TRUE;
   }
@@ -601,8 +638,11 @@ GST_DEFINE_MINI_OBJECT_TYPE (GstFbdevFramebufferSinkVideoMemoryStorage,
 static GstFbdevFramebufferSinkVideoMemoryStorage *video_memory_storage;
 
 static void
-gst_fbdevframebuffersink_video_memory_init (gpointer framebuffer, gsize framebuffer_size) {
-  video_memory_storage = g_slice_new (GstFbdevFramebufferSinkVideoMemoryStorage);
+gst_fbdevframebuffersink_video_memory_init (gpointer framebuffer,
+gsize framebuffer_size)
+{
+  video_memory_storage = g_slice_new (
+      GstFbdevFramebufferSinkVideoMemoryStorage);
   gst_mini_object_init (GST_MINI_OBJECT_CAST (video_memory_storage),
       GST_MINI_OBJECT_FLAG_LOCKABLE,
       gst_fbdev_framebuffer_sink_video_memory_storage_get_type (),
@@ -633,8 +673,8 @@ G_DEFINE_TYPE (GstFbdevFramebufferSinkVideoMemoryAllocator,
 
 #ifdef LAZY_ALLOCATION
 static GstMemory *
-gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator, gsize size,
-    GstAllocationParams *allocation_params)
+gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator,
+    gsize size, GstAllocationParams *allocation_params)
 {
   GstFbdevFramebufferSinkVideoMemoryAllocator *fbdevframebuffersink_allocator =
       (GstFbdevFramebufferSinkVideoMemoryAllocator *) allocator;
@@ -644,7 +684,8 @@ gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator, 
   params = &fbdevframebuffersink_allocator->params;
   mem = g_slice_new (GstFbdevFramebufferSinkVideoMemory);
   gst_memory_init (GST_MEMORY_CAST (mem), GST_MEMORY_FLAG_NO_SHARE |
-      GST_MEMORY_FLAG_VIDEO_MEMORY, allocator, NULL, size, params->align, 0, size);
+      GST_MEMORY_FLAG_VIDEO_MEMORY, allocator, NULL, size, params->align, 0,
+      size);
   mem->allocated = FALSE;
   mem->data = NULL;
   return GST_MEMORY_CAST (mem);
@@ -653,13 +694,14 @@ gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator, 
 
 #ifdef LAZY_ALLOCATION
 static GstMemory *
-gst_fbdevframebuffersink_video_memory_allocator_alloc_actual (GstAllocator *allocator, gsize size,
-    GstAllocationParams *allocation_params, GstFbdevFramebufferSinkVideoMemory *mem)
+gst_fbdevframebuffersink_video_memory_allocator_alloc_actual (
+    GstAllocator *allocator, gsize size, GstAllocationParams *
+    allocation_params, GstFbdevFramebufferSinkVideoMemory *mem)
 {
 #else
 static GstMemory *
-gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator, gsize size,
-    GstAllocationParams *allocation_params)
+gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator,
+    gsize size, GstAllocationParams *allocation_params)
 {
   GstFbdevFramebufferSinkVideoMemory *mem;
 #endif
@@ -673,51 +715,57 @@ gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator, 
 
   GST_DEBUG ("alloc frame %u", size);
 
-  gst_mini_object_lock (GST_MINI_OBJECT_CAST (video_memory_storage), GST_LOCK_FLAG_EXCLUSIVE);
+  gst_mini_object_lock (GST_MINI_OBJECT_CAST (video_memory_storage),
+      GST_LOCK_FLAG_EXCLUSIVE);
 
   /* Always ignore allocation_params, but use our own specific alignment. */
   params = &fbdevframebuffersink_allocator->params;
 
-  align_bytes = ALIGNMENT_GET_ALIGN_BYTES(video_memory_storage->end_marker, params->align);
+  align_bytes = ALIGNMENT_GET_ALIGN_BYTES (video_memory_storage->end_marker,
+      params->align);
   framebuffer_offset = video_memory_storage->end_marker + align_bytes;
 
-  if (video_memory_storage->end_marker + align_bytes + size > video_memory_storage->framebuffer_size) {
-      /* When we can't just provide memory from beyond the highest allocated address, */
-      /* we to have traverse our chain to find a free spot. */
-      ChainEntry *previous_entry;
-      chain = video_memory_storage->chain;
-      previous_entry = NULL;
-      while (chain != NULL) {
-        ChainEntry *entry = chain->data;
-        gsize gap_size;
-        gpointer gap_start;
-        if (previous_entry == NULL)
-          gap_start = video_memory_storage->framebuffer;
-        else
-          gap_start = previous_entry->framebuffer_address + previous_entry->size;
-        gap_size = entry->framebuffer_address - gap_start;
-        align_bytes = ALIGNMENT_GET_ALIGN_BYTES(gap_start - video_memory_storage->framebuffer,
-            params->align);
-        if (gap_size >= align_bytes + size) {
-          /* We found a gap large enough to fit the requested size. */
-          framebuffer_offset = gap_start + align_bytes - video_memory_storage->framebuffer;
-          break;
-        }
-        previous_entry = entry;
-        chain = g_list_next (chain);
+  if (video_memory_storage->end_marker + align_bytes + size >
+      video_memory_storage->framebuffer_size) {
+    /* When we can't just provide memory from beyond the highest allocated
+       address, we to have traverse our chain to find a free spot. */
+    ChainEntry *previous_entry;
+    chain = video_memory_storage->chain;
+    previous_entry = NULL;
+    while (chain != NULL) {
+      ChainEntry *entry = chain->data;
+      gsize gap_size;
+      gpointer gap_start;
+      if (previous_entry == NULL)
+        gap_start = video_memory_storage->framebuffer;
+      else
+        gap_start = previous_entry->framebuffer_address + previous_entry->size;
+      gap_size = entry->framebuffer_address - gap_start;
+      align_bytes = ALIGNMENT_GET_ALIGN_BYTES (gap_start -
+          video_memory_storage->framebuffer, params->align);
+      if (gap_size >= align_bytes + size) {
+        /* We found a gap large enough to fit the requested size. */
+        framebuffer_offset = gap_start + align_bytes -
+            video_memory_storage->framebuffer;
+        break;
       }
-      if (chain == NULL) {
-        GST_ERROR ("Out of video memory");
-        gst_mini_object_unlock (GST_MINI_OBJECT_CAST (video_memory_storage), GST_LOCK_FLAG_EXCLUSIVE);
-        return NULL;
-      }
+      previous_entry = entry;
+      chain = g_list_next (chain);
+    }
+    if (chain == NULL) {
+      GST_ERROR ("Out of video memory");
+      gst_mini_object_unlock (GST_MINI_OBJECT_CAST (video_memory_storage),
+          GST_LOCK_FLAG_EXCLUSIVE);
+      return NULL;
+    }
   }
 
 #ifndef LAZY_ALLOCATION
   mem = g_slice_new (GstFbdevFramebufferSinkVideoMemory);
 
   gst_memory_init (GST_MEMORY_CAST (mem), GST_MEMORY_FLAG_NO_SHARE |
-      GST_MEMORY_FLAG_VIDEO_MEMORY, allocator, NULL, size, params->align, 0, size);
+      GST_MEMORY_FLAG_VIDEO_MEMORY, allocator, NULL, size, params->align, 0,
+      size);
 #endif
 
   mem->data = video_memory_storage->framebuffer + framebuffer_offset;
@@ -735,25 +783,29 @@ gst_fbdevframebuffersink_video_memory_allocator_alloc (GstAllocator *allocator, 
         break;
     chain = g_list_next (chain);
   }
-  /* Insert the new entry (if chain is NULL, the entry will be appended at the end). */
+  /* Insert the new entry (if chain is NULL, the entry will be appended at
+     the end). */
   chain_entry = g_slice_new (ChainEntry);
   chain_entry->framebuffer_address = mem->data;
   chain_entry->size = size;
-  video_memory_storage->chain = g_list_insert_before (video_memory_storage->chain,
-      chain, chain_entry);
+  video_memory_storage->chain = g_list_insert_before (
+      video_memory_storage->chain, chain, chain_entry);
 
-  gst_mini_object_unlock (GST_MINI_OBJECT_CAST (video_memory_storage), GST_LOCK_FLAG_EXCLUSIVE);
+  gst_mini_object_unlock (GST_MINI_OBJECT_CAST (video_memory_storage),
+      GST_LOCK_FLAG_EXCLUSIVE);
 
-  GST_INFO ("Allocated video memory buffer of size %zd at %p, align %zd, mem = %p\n", size,
-      mem->data, params->align, mem);
+  GST_INFO ("Allocated video memory buffer of size %zd at %p, align %zd, "
+      "mem = %p\n", size, mem->data, params->align, mem);
 
   return (GstMemory *) mem;
 }
 
 static void
-gst_fbdevframebuffersink_video_memory_allocator_free (GstAllocator * allocator, GstMemory * mem)
+gst_fbdevframebuffersink_video_memory_allocator_free (GstAllocator * allocator,
+    GstMemory * mem)
 {
-  GstFbdevFramebufferSinkVideoMemory *vmem = (GstFbdevFramebufferSinkVideoMemory *) mem;
+  GstFbdevFramebufferSinkVideoMemory *vmem =
+      (GstFbdevFramebufferSinkVideoMemory *) mem;
   GList *chain;
 
 #ifdef LAZY_ALLOCATION
@@ -763,7 +815,8 @@ gst_fbdevframebuffersink_video_memory_allocator_free (GstAllocator * allocator, 
   }
 #endif
 
-  gst_mini_object_lock (GST_MINI_OBJECT_CAST (video_memory_storage), GST_LOCK_FLAG_EXCLUSIVE);
+  gst_mini_object_lock (GST_MINI_OBJECT_CAST (video_memory_storage),
+      GST_LOCK_FLAG_EXCLUSIVE);
 
   chain = video_memory_storage->chain;
 
@@ -779,35 +832,41 @@ gst_fbdevframebuffersink_video_memory_allocator_free (GstAllocator * allocator, 
           video_memory_storage->end_marker = 0;
         else {
           ChainEntry *previous_entry = previous->data;
-          video_memory_storage->end_marker = previous_entry->framebuffer_address +
-              previous_entry->size - video_memory_storage->framebuffer;
+          video_memory_storage->end_marker = previous_entry->framebuffer_address
+              + previous_entry->size - video_memory_storage->framebuffer;
         }
       }
-      video_memory_storage->chain = g_list_delete_link (video_memory_storage->chain, chain);
+      video_memory_storage->chain =
+          g_list_delete_link (video_memory_storage->chain, chain);
       video_memory_storage->total_allocated -= mem->size;
-      gst_mini_object_unlock (GST_MINI_OBJECT_CAST (video_memory_storage), GST_LOCK_FLAG_EXCLUSIVE);
-      GST_INFO ("Freed video memory buffer of size %zd at %p", mem->size, vmem->data);
+      gst_mini_object_unlock (GST_MINI_OBJECT_CAST (video_memory_storage),
+          GST_LOCK_FLAG_EXCLUSIVE);
+      GST_INFO ("Freed video memory buffer of size %zd at %p", mem->size,
+          vmem->data);
       g_slice_free (GstFbdevFramebufferSinkVideoMemory, vmem);
       return;
     }
     chain = g_list_next (chain);
   }
 
-  gst_mini_object_unlock (GST_MINI_OBJECT_CAST (video_memory_storage), GST_LOCK_FLAG_EXCLUSIVE);
+  gst_mini_object_unlock (GST_MINI_OBJECT_CAST (video_memory_storage),
+      GST_LOCK_FLAG_EXCLUSIVE);
   GST_ERROR ("video_memory_free failed");
 }
 
 static void
-gst_fbdevframebuffersink_video_memory_allocator_class_init (GstFbdevFramebufferSinkVideoMemoryAllocatorClass * klass) {
+gst_fbdevframebuffersink_video_memory_allocator_class_init (
+     GstFbdevFramebufferSinkVideoMemoryAllocatorClass * klass) {
   GstAllocatorClass * allocator_class = GST_ALLOCATOR_CLASS (klass);
 
-  allocator_class->alloc = gst_fbdevframebuffersink_video_memory_allocator_alloc;
+  allocator_class->alloc =
+      gst_fbdevframebuffersink_video_memory_allocator_alloc;
   allocator_class->free = gst_fbdevframebuffersink_video_memory_allocator_free;
 }
 
 static void
-gst_fbdevframebuffersink_video_memory_allocator_init (GstFbdevFramebufferSinkVideoMemoryAllocator
-    *video_memory_allocator) {
+gst_fbdevframebuffersink_video_memory_allocator_init (
+    GstFbdevFramebufferSinkVideoMemoryAllocator *video_memory_allocator) {
   GstAllocator * alloc = GST_ALLOCATOR_CAST (video_memory_allocator);
 
   alloc->mem_type = "fbdevframebuffersink_video_memory";
@@ -816,19 +875,25 @@ gst_fbdevframebuffersink_video_memory_allocator_init (GstFbdevFramebufferSinkVid
 }
 
 static GstAllocator *
-gst_fbdevframebuffersink_video_memory_allocator_new (GstFramebufferSink *framebuffersink,
-GstVideoInfo *info, gboolean pannable, gboolean is_overlay)
+gst_fbdevframebuffersink_video_memory_allocator_new (GstFramebufferSink *
+    framebuffersink, GstVideoInfo *info, gboolean pannable, gboolean is_overlay)
 {
-  GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
-  GstFbdevFramebufferSinkVideoMemoryAllocator *fbdevframebuffersink_video_memory_allocator =
-      g_object_new (gst_fbdevframebuffersink_video_memory_allocator_get_type (), NULL);
+  GstFbdevFramebufferSink *fbdevframebuffersink =
+      GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
+  GstFbdevFramebufferSinkVideoMemoryAllocator *
+      fbdevframebuffersink_video_memory_allocator =
+      g_object_new (gst_fbdevframebuffersink_video_memory_allocator_get_type (),
+      NULL);
   char s[80];
 
   gst_fbdevframebuffersink_allocation_params_init (fbdevframebuffersink,
-      &fbdevframebuffersink_video_memory_allocator->params, pannable, is_overlay);
+      &fbdevframebuffersink_video_memory_allocator->params, pannable,
+      is_overlay);
 
-  g_sprintf (s, "fbdevframebuffersink_video_memory_%p", fbdevframebuffersink_video_memory_allocator);
-  gst_allocator_register (s, gst_object_ref (fbdevframebuffersink_video_memory_allocator) );
+  g_sprintf (s, "fbdevframebuffersink_video_memory_%p",
+      fbdevframebuffersink_video_memory_allocator);
+  gst_allocator_register (s,
+      gst_object_ref (fbdevframebuffersink_video_memory_allocator));
 
   return GST_ALLOCATOR_CAST (fbdevframebuffersink_video_memory_allocator);
 }

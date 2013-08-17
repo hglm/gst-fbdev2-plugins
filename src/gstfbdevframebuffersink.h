@@ -30,13 +30,19 @@ G_BEGIN_DECLS
 
 /* Main class. */
 
-#define GST_TYPE_FBDEVFRAMEBUFFERSINK   (gst_fbdevframebuffersink_get_type())
-#define GST_FBDEVFRAMEBUFFERSINK(obj)   (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FBDEVFRAMEBUFFERSINK,GstFbdevFramebufferSink))
-#define GST_FBDEVFRAMEBUFFERSINK_CLASS(klass)   (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FBDEVFRAMEBUFFERSINK,GstFbdevFramebufferSinkClass))
-#define GST_IS_FBDEVFRAMEBUFFERSINK(obj)   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FBDEVFRAMEBUFFERSINK))
-#define GST_IS_FBDEVFRAMEBUFFERSINK_CLASS(klass)   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FBDEVFRAMEBUFFERSINK))
+#define GST_TYPE_FBDEVFRAMEBUFFERSINK (gst_fbdevframebuffersink_get_type ())
+#define GST_FBDEVFRAMEBUFFERSINK(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), \
+    GST_TYPE_FBDEVFRAMEBUFFERSINK, GstFbdevFramebufferSink))
+#define GST_FBDEVFRAMEBUFFERSINK_CLASS(klass) \
+    (G_TYPE_CHECK_CLASS_CAST ((klass), \
+    GST_TYPE_FBDEVFRAMEBUFFERSINK, GstFbdevFramebufferSinkClass))
+#define GST_IS_FBDEVFRAMEBUFFERSINK(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), \
+    GST_TYPE_FBDEVFRAMEBUFFERSINK))
+#define GST_IS_FBDEVFRAMEBUFFERSINK_CLASS(klass) \
+    (G_TYPE_CHECK_CLASS_TYPE ((klass), GST_TYPE_FBDEVFRAMEBUFFERSINK))
 #define GST_FBDEVFRAMEBUFFERSINK_GET_CLASS(obj) \
-  (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_FRAMEBUFFER_SINK, GstFbdevFramebufferSinkClass))
+    (G_TYPE_INSTANCE_GET_CLASS ((obj), GST_TYPE_FRAMEBUFFER_SINK, \
+     GstFbdevFramebufferSinkClass))
 
 typedef struct _GstFbdevFramebufferSink GstFbdevFramebufferSink;
 typedef struct _GstFbdevFramebufferSinkClass GstFbdevFramebufferSinkClass;
@@ -64,9 +70,11 @@ struct _GstFbdevFramebufferSinkClass
 
 GType gst_fbdevframebuffersink_get_type (void);
 
-gboolean gst_fbdevframebuffersink_open_hardware (GstFramebufferSink *framebuffersink,
-   GstVideoInfo *info, gsize *video_memory_size, gsize *pannable_video_memory_size);
-void gst_fbdevframebuffersink_close_hardware (GstFramebufferSink *framebuffersink);
+gboolean gst_fbdevframebuffersink_open_hardware (
+    GstFramebufferSink *framebuffersink, GstVideoInfo *info,
+    gsize *video_memory_size, gsize *pannable_video_memory_size);
+void gst_fbdevframebuffersink_close_hardware (
+    GstFramebufferSink *framebuffersink);
 
 G_END_DECLS
 

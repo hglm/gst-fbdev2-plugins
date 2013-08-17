@@ -142,21 +142,26 @@ const gchar *message) {
     offset = ALIGNMENT_GET_ALIGNED(offset, align);
 
 /* Class function prototypes. */
-static gboolean gst_sunxifbsink_open_hardware (GstFramebufferSink *framebuffersink,
-    GstVideoInfo *info, gsize *video_memory_size, gsize *pannable_video_memory_size);
-static void gst_sunxifbsink_close_hardware (GstFramebufferSink *framebuffersink);
-static GstVideoFormat *gst_sunxifbsink_get_supported_overlay_formats (GstFramebufferSink *framebuffersink);
-static gboolean gst_sunxifbsink_get_overlay_video_alignment (GstFramebufferSink *framebuffersink,
-    GstVideoInfo *video_info, GstFramebufferSinkOverlayVideoAlignment *video_alignment, gint *overlay_align,
-    gboolean *video_alignment_matches);
-static gboolean gst_sunxifbsink_prepare_overlay (GstFramebufferSink *framebuffersink, GstVideoFormat format);
-static GstFlowReturn gst_sunxifbsink_show_overlay (GstFramebufferSink *framebuffersink,
-    GstMemory *memory);
+static gboolean gst_sunxifbsink_open_hardware (
+    GstFramebufferSink *framebuffersink, GstVideoInfo *info,
+    gsize *video_memory_size, gsize *pannable_video_memory_size);
+static void gst_sunxifbsink_close_hardware (
+    GstFramebufferSink *framebuffersink);
+static GstVideoFormat *gst_sunxifbsink_get_supported_overlay_formats (
+    GstFramebufferSink *framebuffersink);
+static gboolean gst_sunxifbsink_get_overlay_video_alignment (
+    GstFramebufferSink *framebuffersink, GstVideoInfo *video_info,
+    GstFramebufferSinkOverlayVideoAlignment *video_alignment,
+    gint *overlay_align, gboolean *video_alignment_matches);
+static gboolean gst_sunxifbsink_prepare_overlay (
+    GstFramebufferSink *framebuffersink, GstVideoFormat format);
+static GstFlowReturn gst_sunxifbsink_show_overlay (
+    GstFramebufferSink *framebuffersink, GstMemory *memory);
 
-static gboolean gst_sunxifbsink_reserve_layer(GstSunxifbsink *sunxifbsink);
-static void gst_sunxifbsink_release_layer(GstSunxifbsink *sunxifbsink);
-static gboolean gst_sunxifbsink_show_layer(GstSunxifbsink *sunxifbsink);
-static void gst_sunxifbsink_hide_layer(GstSunxifbsink *sunxifbsink);
+static gboolean gst_sunxifbsink_reserve_layer (GstSunxifbsink *sunxifbsink);
+static void gst_sunxifbsink_release_layer (GstSunxifbsink *sunxifbsink);
+static gboolean gst_sunxifbsink_show_layer (GstSunxifbsink *sunxifbsink);
+static void gst_sunxifbsink_hide_layer (GstSunxifbsink *sunxifbsink);
 
 enum
 {
@@ -206,18 +211,20 @@ static GstVideoFormat sunxifbsink_supported_overlay_formats_table[] = {
 /* Class initialization. */
 
 #define gst_sunxifbsink_parent_class fbdevframebuffersink_parent_class
-G_DEFINE_TYPE_WITH_CODE (GstSunxifbsink, gst_sunxifbsink, GST_TYPE_FBDEVFRAMEBUFFERSINK,
+G_DEFINE_TYPE_WITH_CODE (GstSunxifbsink, gst_sunxifbsink,
+  GST_TYPE_FBDEVFRAMEBUFFERSINK,
   GST_DEBUG_CATEGORY_INIT (gst_sunxifbsink_debug_category, "sunxifbsink", 0,
   "debug category for sunxifbsink element"));
 
 static void
 gst_sunxifbsink_class_init (GstSunxifbsinkClass* klass)
 {
-//  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
-  GstFramebufferSinkClass *framebuffer_sink_class = GST_FRAMEBUFFERSINK_CLASS (klass);
+/*  GObjectClass *gobject_class = G_OBJECT_CLASS (klass); */
+  GstFramebufferSinkClass *framebuffer_sink_class =
+      GST_FRAMEBUFFERSINK_CLASS (klass);
 
-//  gobject_class->set_property = gst_sunxifbsink_set_property;
-//  gobject_class->get_property = gst_sunxifbsink_get_property;
+/*  gobject_class->set_property = gst_sunxifbsink_set_property;
+    gobject_class->get_property = gst_sunxifbsink_get_property; */
 
   /* Setting up pads and setting metadata should be moved to
      base_class_init if you intend to subclass this class. */
@@ -230,13 +237,18 @@ gst_sunxifbsink_class_init (GstSunxifbsinkClass* klass)
       "sunxi framebuffer sink",
       "Harm Hanemaaijer <fgenfb@yahoo.com>");
 
-  framebuffer_sink_class->open_hardware = GST_DEBUG_FUNCPTR (gst_sunxifbsink_open_hardware);
-  framebuffer_sink_class->close_hardware = GST_DEBUG_FUNCPTR (gst_sunxifbsink_close_hardware);
-  framebuffer_sink_class->get_supported_overlay_formats = GST_DEBUG_FUNCPTR (gst_sunxifbsink_get_supported_overlay_formats);
-  framebuffer_sink_class->get_overlay_video_alignment = GST_DEBUG_FUNCPTR (
-      gst_sunxifbsink_get_overlay_video_alignment);
-  framebuffer_sink_class->prepare_overlay = GST_DEBUG_FUNCPTR (gst_sunxifbsink_prepare_overlay);
-  framebuffer_sink_class->show_overlay = GST_DEBUG_FUNCPTR (gst_sunxifbsink_show_overlay);
+  framebuffer_sink_class->open_hardware =
+      GST_DEBUG_FUNCPTR (gst_sunxifbsink_open_hardware);
+  framebuffer_sink_class->close_hardware =
+      GST_DEBUG_FUNCPTR (gst_sunxifbsink_close_hardware);
+  framebuffer_sink_class->get_supported_overlay_formats =
+      GST_DEBUG_FUNCPTR (gst_sunxifbsink_get_supported_overlay_formats);
+  framebuffer_sink_class->get_overlay_video_alignment =
+      GST_DEBUG_FUNCPTR (gst_sunxifbsink_get_overlay_video_alignment);
+  framebuffer_sink_class->prepare_overlay =
+      GST_DEBUG_FUNCPTR (gst_sunxifbsink_prepare_overlay);
+  framebuffer_sink_class->show_overlay =
+      GST_DEBUG_FUNCPTR (gst_sunxifbsink_show_overlay);
 }
 
 /* Class member functions. */
@@ -246,15 +258,18 @@ gst_sunxifbsink_init (GstSunxifbsink *sunxifbsink) {
 }
 
 static gboolean
-gst_sunxifbsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *info,
-gsize *video_memory_size, gsize *pannable_video_memory_size) {
+gst_sunxifbsink_open_hardware (GstFramebufferSink *framebuffersink,
+    GstVideoInfo *info, gsize *video_memory_size,
+    gsize *pannable_video_memory_size)
+{
   GstSunxifbsink *sunxifbsink = GST_SUNXIFBSINK (framebuffersink);
-  GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
+  GstFbdevFramebufferSink *fbdevframebuffersink =
+      GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
   int version;
   uint32_t tmp;
 
-  if (!gst_fbdevframebuffersink_open_hardware(framebuffersink, info, video_memory_size,
-      pannable_video_memory_size))
+  if (!gst_fbdevframebuffersink_open_hardware(framebuffersink, info,
+      video_memory_size, pannable_video_memory_size))
     return FALSE;
 
   sunxifbsink->fd_disp = open ("/dev/disp", O_RDWR);
@@ -312,21 +327,24 @@ gst_sunxifbsink_close_hardware (GstFramebufferSink *framebuffersink) {
 }
 
 static GstVideoFormat *
-gst_sunxifbsink_get_supported_overlay_formats (GstFramebufferSink *framebuffersink)
+gst_sunxifbsink_get_supported_overlay_formats (
+    GstFramebufferSink *framebuffersink)
 {
   return sunxifbsink_supported_overlay_formats_table;
 }
 
-/* Return the video alignment (top/bottom/left/right padding and stride alignment for each plane) that
-   is required to display the overlay described by video_info. Also returns the alignment requirement
-   of the start address of the overlay in video memory. video_alignment_matches is set to TRUE if
-   the alignment defined by video_info did not have to be adjusted, FALSE otherwise. The function
-   returns TRUE if hardware overlay with given video info is supported, FALSE otherwise. */
+/* Return the video alignment (top/bottom/left/right padding and stride
+   alignment for each plane) that  is required to display the overlay
+   described by video_info. Also returns the alignment requirement of the
+   start address of the overlay in video memory. video_alignment_matches
+   is set to TRUE if the alignment defined by video_info did not have to be
+   adjusted, FALSE otherwise. The function returns TRUE if hardware overlay
+   with given video info is supported, FALSE otherwise. */
 
 gboolean
-gst_sunxifbsink_get_overlay_video_alignment(GstFramebufferSink *framebuffersink, GstVideoInfo *video_info,
-    GstFramebufferSinkOverlayVideoAlignment *video_alignment, gint *overlay_align,
-    gboolean *video_alignment_matches)
+gst_sunxifbsink_get_overlay_video_alignment(GstFramebufferSink *framebuffersink,
+    GstVideoInfo *video_info, GstFramebufferSinkOverlayVideoAlignment *
+    video_alignment, gint *overlay_align, gboolean *video_alignment_matches)
 {
   GstVideoFormat format;
   format = GST_VIDEO_INFO_FORMAT (video_info);
@@ -335,30 +353,36 @@ gst_sunxifbsink_get_overlay_video_alignment(GstFramebufferSink *framebuffersink,
       format == GST_VIDEO_FORMAT_NV12 ||
       format == GST_VIDEO_FORMAT_NV21) {
     if (GST_VIDEO_INFO_WIDTH (video_info) & 1)
-      /* Hardware overlay not supported for odd widths for all planar formats except Y444.
-         Although it almost works for odd widths, there is an artifact line at the right of the scaled
-         area, related to the alignment requirements of the width. */
+      /* Hardware overlay not supported for odd widths for all planar formats
+         except Y444. Although it almost works for odd widths, there is an
+         artifact line at the right of the scaled area, related to the
+         alignment requirements of the width. */
       return FALSE;
   }
-  /* When uses other formats, some artifacts have been observed when the width is odd, but for now
-     leave support for odd widths enabled. */
+  /* When uses other formats, some artifacts have been observed when the width
+     is odd, but for now leave support for odd widths enabled. */
   *overlay_align = 15;
-  /* For the Allwinner hardware overlay, scanlines need to be aligned to pixel boundaries with a minimum
-     alignment of word-aligned. This is a good match for the buffer format generally provided by
-     upstream, so direct video memory buffer pool streaming is almost always possible. */
-  gst_framebuffersink_set_overlay_video_alignment_from_scanline_alignment (framebuffersink, video_info,
-      3, TRUE, video_alignment, video_alignment_matches);
+  /* For the Allwinner hardware overlay, scanlines need to be aligned to pixel
+     boundaries with a minimum alignment of word-aligned. This is a good match
+     for the buffer format generally provided by upstream, so direct video
+     memory buffer pool streaming is almost always possible. */
+  gst_framebuffersink_set_overlay_video_alignment_from_scanline_alignment (
+      framebuffersink, video_info, 3, TRUE, video_alignment,
+      video_alignment_matches);
   return TRUE;
 }
 
 /*
  * For the prepare overlay and show overlay functions, the parameters are
  * stored in the following fields:
- * framebuffersink->overlay_plane_offset[i] is the offset in bytes of each plane. Any
- *   top or left padding returned by get_overlay_video_alignment() will come first.
- * framebuffersink->overlay_scanline_offset[i] is the offset in bytes of the first pixel of each
- *   scanline for each plane (corresponding with the left padding * bytes per pixel). Usually 0.
- * framebuffersink->overlay_scanline_stride[i] is the scanline stride in bytes of each plane.
+ * framebuffersink->overlay_plane_offset[i] is the offset in bytes of each
+ *     plane. Any top or left padding returned by get_overlay_video_alignment()
+ *     will come first.
+ * framebuffersink->overlay_scanline_offset[i] is the offset in bytes of the
+ *     first pixel of each scanline for each plane (corresponding with the left
+ *     padding * bytes per pixel). Usually 0.
+ * framebuffersink->overlay_scanline_stride[i] is the scanline stride in bytes
+ *     of each plane.
  * framebuffersink->videosink.width is the source width.
  * framebuffersink->videosink.height is the source height.
  * framebuffersink->video_rectangle.x is the destination x coordinate.
@@ -368,7 +392,8 @@ gst_sunxifbsink_get_overlay_video_alignment(GstFramebufferSink *framebuffersink,
  */
 
 static gboolean
-gst_sunxifbsink_prepare_overlay (GstFramebufferSink *framebuffersink, GstVideoFormat format)
+gst_sunxifbsink_prepare_overlay (GstFramebufferSink *framebuffersink,
+    GstVideoFormat format)
 {
   GstSunxifbsink *sunxifbsink = GST_SUNXIFBSINK (framebuffersink);
 
@@ -381,11 +406,12 @@ gst_sunxifbsink_prepare_overlay (GstFramebufferSink *framebuffersink, GstVideoFo
 }
 
 static GstFlowReturn
-gst_sunxifbsink_show_overlay_yuv_planar (GstFramebufferSink *framebuffersink, guintptr framebuffer_offset,
-GstVideoFormat format)
+gst_sunxifbsink_show_overlay_yuv_planar (GstFramebufferSink *framebuffersink,
+    guintptr framebuffer_offset, GstVideoFormat format)
 {
   GstSunxifbsink *sunxifbsink = GST_SUNXIFBSINK (framebuffersink);
-  GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
+  GstFbdevFramebufferSink *fbdevframebuffersink =
+      GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
     __disp_fb_t fb;
     __disp_rect_t rect;
     __disp_rect_t output_rect;
@@ -394,19 +420,22 @@ GstVideoFormat format)
     memset(&fb, 0, sizeof (fb));
 
     if (format == GST_VIDEO_FORMAT_Y444) {
-      fb.addr[0] = fbdevframebuffersink->fixinfo.smem_start + framebuffer_offset;
-      fb.addr[1] = fbdevframebuffersink->fixinfo.smem_start + framebuffer_offset +
-          framebuffersink->overlay_plane_offset[1];
-      fb.addr[2] = fbdevframebuffersink->fixinfo.smem_start + framebuffer_offset +
-          framebuffersink->overlay_plane_offset[2];
+      fb.addr[0] = fbdevframebuffersink->fixinfo.smem_start +
+          framebuffer_offset;
+      fb.addr[1] = fbdevframebuffersink->fixinfo.smem_start + framebuffer_offset
+          + framebuffersink->overlay_plane_offset[1];
+      fb.addr[2] = fbdevframebuffersink->fixinfo.smem_start + framebuffer_offset
+          + framebuffersink->overlay_plane_offset[2];
       fb.format = DISP_FORMAT_YUV444;
       fb.seq = DISP_SEQ_P3210;
       fb.mode = DISP_MOD_NON_MB_PLANAR;
     }
-    else if (format == GST_VIDEO_FORMAT_NV12 || format == GST_VIDEO_FORMAT_NV21) {
-      fb.addr[0] = fbdevframebuffersink->fixinfo.smem_start + framebuffer_offset;
-      fb.addr[1] = fbdevframebuffersink->fixinfo.smem_start + framebuffer_offset +
-          framebuffersink->overlay_plane_offset[1];
+    else if (format == GST_VIDEO_FORMAT_NV12
+        || format == GST_VIDEO_FORMAT_NV21) {
+      fb.addr[0] = fbdevframebuffersink->fixinfo.smem_start +
+          framebuffer_offset;
+      fb.addr[1] = fbdevframebuffersink->fixinfo.smem_start + framebuffer_offset
+          + framebuffersink->overlay_plane_offset[1];
       fb.format = DISP_FORMAT_YUV420;
       if (format == GST_VIDEO_FORMAT_NV12)
         fb.seq = DISP_SEQ_UVUV;
@@ -415,26 +444,28 @@ GstVideoFormat format)
       fb.mode = DISP_MOD_NON_MB_UV_COMBINED;
     }
     else {
-      fb.addr[0] = fbdevframebuffersink->fixinfo.smem_start + framebuffer_offset;
+      fb.addr[0] = fbdevframebuffersink->fixinfo.smem_start +
+          framebuffer_offset;
       if (format == GST_VIDEO_FORMAT_I420) {
-        fb.addr[1] = fbdevframebuffersink->fixinfo.smem_start + framebuffer_offset +
-            framebuffersink->overlay_plane_offset[1];
-        fb.addr[2] = fbdevframebuffersink->fixinfo.smem_start + framebuffer_offset +
-            framebuffersink->overlay_plane_offset[2];
+        fb.addr[1] = fbdevframebuffersink->fixinfo.smem_start +
+            framebuffer_offset + framebuffersink->overlay_plane_offset[1];
+        fb.addr[2] = fbdevframebuffersink->fixinfo.smem_start +
+            framebuffer_offset + framebuffersink->overlay_plane_offset[2];
       }
       else {
         /* GST_VIDEO_FORMAT_YV12 */
-        fb.addr[1] = fbdevframebuffersink->fixinfo.smem_start + framebuffer_offset +
-            framebuffersink->overlay_plane_offset[2];
-        fb.addr[2] = fbdevframebuffersink->fixinfo.smem_start + framebuffer_offset +
-            framebuffersink->overlay_plane_offset[1];
+        fb.addr[1] = fbdevframebuffersink->fixinfo.smem_start +
+            framebuffer_offset + framebuffersink->overlay_plane_offset[2];
+        fb.addr[2] = fbdevframebuffersink->fixinfo.smem_start +
+            framebuffer_offset + framebuffersink->overlay_plane_offset[1];
       }
       fb.format = DISP_FORMAT_YUV420;
       fb.seq = DISP_SEQ_P3210;
       fb.mode = DISP_MOD_NON_MB_PLANAR;
     }
     fb.size.width = framebuffersink->overlay_scanline_stride[0]
-        / (GST_VIDEO_FORMAT_INFO_SCALE_WIDTH (framebuffersink->video_info.finfo, 0, 8)
+        / (GST_VIDEO_FORMAT_INFO_SCALE_WIDTH (framebuffersink->video_info.finfo,
+        0, 8)
         * GST_VIDEO_INFO_COMP_PSTRIDE (&framebuffersink->video_info, 0) / 8);
     fb.size.height = framebuffersink->videosink.height;
 
@@ -471,11 +502,12 @@ GstVideoFormat format)
 }
 
 static GstFlowReturn
-gst_sunxifbsink_show_overlay_yuv_packed (GstFramebufferSink *framebuffersink, guintptr framebuffer_offset,
-GstVideoFormat format)
+gst_sunxifbsink_show_overlay_yuv_packed (GstFramebufferSink *framebuffersink,
+    guintptr framebuffer_offset, GstVideoFormat format)
 {
   GstSunxifbsink *sunxifbsink = GST_SUNXIFBSINK (framebuffersink);
-  GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
+  GstFbdevFramebufferSink *fbdevframebuffersink =
+      GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
     __disp_fb_t fb;
     __disp_rect_t rect;
     __disp_rect_t output_rect;
@@ -497,7 +529,8 @@ GstVideoFormat format)
         fb.seq = DISP_SEQ_UYVY;
     }
     fb.size.width = framebuffersink->overlay_scanline_stride[0]
-        / (GST_VIDEO_FORMAT_INFO_SCALE_WIDTH (framebuffersink->video_info.finfo, 0, 8)
+        / (GST_VIDEO_FORMAT_INFO_SCALE_WIDTH (framebuffersink->video_info.finfo,
+        0, 8)
         * GST_VIDEO_INFO_COMP_PSTRIDE (&framebuffersink->video_info, 0) / 8);
     fb.mode = DISP_MOD_INTERLEAVED;
 
@@ -534,10 +567,12 @@ GstVideoFormat format)
 }
 
 static GstFlowReturn
-gst_sunxifbsink_show_overlay_bgrx32 (GstFramebufferSink *framebuffersink, guintptr framebuffer_offset)
+gst_sunxifbsink_show_overlay_bgrx32 (GstFramebufferSink *framebuffersink,
+    guintptr framebuffer_offset)
 {
   GstSunxifbsink *sunxifbsink = GST_SUNXIFBSINK (framebuffersink);
-  GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
+  GstFbdevFramebufferSink *fbdevframebuffersink =
+      GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
     __disp_fb_t fb;
     __disp_rect_t rect;
     __disp_rect_t output_rect;
@@ -586,10 +621,12 @@ gst_sunxifbsink_show_overlay_bgrx32 (GstFramebufferSink *framebuffersink, guintp
 }
 
 static GstFlowReturn
-gst_sunxifbsink_show_overlay (GstFramebufferSink *framebuffersink, GstMemory *memory)
+gst_sunxifbsink_show_overlay (GstFramebufferSink *framebuffersink,
+    GstMemory *memory)
 {
   GstSunxifbsink *sunxifbsink = GST_SUNXIFBSINK (framebuffersink);
-  GstFbdevFramebufferSink *fbdevframebuffersink = GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
+  GstFbdevFramebufferSink *fbdevframebuffersink =
+      GST_FBDEVFRAMEBUFFERSINK (framebuffersink);
   GstMapInfo mapinfo;
   guintptr framebuffer_offset;
   GstFlowReturn res;
@@ -597,7 +634,8 @@ gst_sunxifbsink_show_overlay (GstFramebufferSink *framebuffersink, GstMemory *me
   gst_memory_map(memory, &mapinfo, 0);
   framebuffer_offset = mapinfo.data - fbdevframebuffersink->framebuffer;
 
-  GST_LOG_OBJECT (sunxifbsink, "Show overlay called (offset = 0x%08X)", framebuffer_offset);
+  GST_LOG_OBJECT (sunxifbsink, "Show overlay called (offset = 0x%08X)",
+      framebuffer_offset);
 
   res = GST_FLOW_ERROR;
   if (sunxifbsink->overlay_format == GST_VIDEO_FORMAT_I420 ||
@@ -605,15 +643,16 @@ gst_sunxifbsink_show_overlay (GstFramebufferSink *framebuffersink, GstMemory *me
       sunxifbsink->overlay_format == GST_VIDEO_FORMAT_Y444 ||
       sunxifbsink->overlay_format == GST_VIDEO_FORMAT_NV12 ||
       sunxifbsink->overlay_format == GST_VIDEO_FORMAT_NV21)
-    res =  gst_sunxifbsink_show_overlay_yuv_planar (framebuffersink, framebuffer_offset,
-        sunxifbsink->overlay_format);
+    res =  gst_sunxifbsink_show_overlay_yuv_planar (framebuffersink,
+        framebuffer_offset, sunxifbsink->overlay_format);
   else if (sunxifbsink->overlay_format == GST_VIDEO_FORMAT_YUY2 ||
       sunxifbsink->overlay_format == GST_VIDEO_FORMAT_UYVY ||
       sunxifbsink->overlay_format == GST_VIDEO_FORMAT_AYUV)
-    res =  gst_sunxifbsink_show_overlay_yuv_packed (framebuffersink, framebuffer_offset,
-        sunxifbsink->overlay_format);
+    res =  gst_sunxifbsink_show_overlay_yuv_packed (framebuffersink,
+        framebuffer_offset, sunxifbsink->overlay_format);
   else if (sunxifbsink->overlay_format == GST_VIDEO_FORMAT_BGRx)
-    res = gst_sunxifbsink_show_overlay_bgrx32 (framebuffersink, framebuffer_offset);
+    res = gst_sunxifbsink_show_overlay_bgrx32 (framebuffersink,
+        framebuffer_offset);
 
   gst_memory_unmap(memory, &mapinfo);
   return res;
@@ -628,7 +667,8 @@ gst_sunxifbsink_reserve_layer(GstSunxifbsink *sunxifbsink) {
 
     tmp[0] = sunxifbsink->framebuffer_id;
     tmp[1] = DISP_LAYER_WORK_MODE_NORMAL;
-    sunxifbsink->layer_id = ioctl (sunxifbsink->fd_disp, DISP_CMD_LAYER_REQUEST, &tmp);
+    sunxifbsink->layer_id =
+        ioctl (sunxifbsink->fd_disp, DISP_CMD_LAYER_REQUEST, &tmp);
     if (sunxifbsink->layer_id < 0)
         return FALSE;
 
@@ -647,9 +687,10 @@ gst_sunxifbsink_reserve_layer(GstSunxifbsink *sunxifbsink) {
     layer_info.alpha_val = 255;
 
     /* Initially set "layer_info.fb" to something reasonable in order to avoid
-     * "[DISP] not supported scaler input pixel format:0 in Scaler_sw_para_to_reg1"
-     * warning in dmesg log */
-    layer_info.fb.addr[0] = sunxifbsink->fbdevframebuffersink.fixinfo.smem_start;
+       "[DISP] not supported scaler input pixel format:0 in
+       Scaler_sw_para_to_reg1 warning in dmesg log */
+    layer_info.fb.addr[0] =
+        sunxifbsink->fbdevframebuffersink.fixinfo.smem_start;
     layer_info.fb.size.width = 1;
     layer_info.fb.size.height = 1;
     layer_info.fb.format = DISP_FORMAT_ARGB8888;

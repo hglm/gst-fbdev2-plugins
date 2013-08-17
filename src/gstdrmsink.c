@@ -17,8 +17,9 @@
  * Boston, MA 02110-1335, USA.
  */
 /*
- * Based partly on gstkmssink.c found at https://gitorious.org/vjaquez-gstreamer/
- * which has the following copyright message.
+ * Based partly on gstkmssink.c found at
+ * https://gitorious.org/vjaquez-gstreamer/ which has the following
+ * copyright message.
  *
  * Copyright (C) 2012 Texas Instruments
  * Copyright (C) 2012 Collabora Ltd
@@ -134,10 +135,11 @@
 GST_DEBUG_CATEGORY_STATIC (gst_drmsink_debug_category);
 #define GST_CAT_DEFAULT gst_drmsink_debug_category
 
-/* Inline function to produce informational output if silent property is not set; */
-/* if silent property is enabled only debugging info is produced. */
+/* Inline function to produce informational output if silent property is not
+   set; if silent property is enabled only debugging info is produced. */
 static inline void GST_DRMSINK_MESSAGE_OBJECT (GstDrmsink *drmsink,
-const gchar *message) {
+const gchar *message)
+{
   if (!drmsink->framebuffersink.silent)
     g_print ("%s.\n", message);
   GST_INFO_OBJECT (drmsink, message);
@@ -152,18 +154,20 @@ static void gst_drmsink_get_property (GObject * object,
     guint property_id, GValue * value, GParamSpec * pspec);
 
 static gboolean gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink,
-    GstVideoInfo *info, gsize *video_memory_size, gsize *pannable_video_memory_size);
+    GstVideoInfo *info, gsize *video_memory_size,
+    gsize *pannable_video_memory_size);
 static void gst_drmsink_close_hardware (GstFramebufferSink *framebuffersink);
-static GstAllocator *gst_drmsink_video_memory_allocator_new (GstFramebufferSink *
-    framebuffersink, GstVideoInfo *info, gboolean pannable, gboolean is_overlay);
+static GstAllocator *gst_drmsink_video_memory_allocator_new (
+    GstFramebufferSink *framebuffersink, GstVideoInfo *info, gboolean pannable,
+    gboolean is_overlay);
 static void gst_drmsink_pan_display (GstFramebufferSink *framebuffersink,
     GstMemory *memory);
 static void gst_drmsink_wait_for_vsync (GstFramebufferSink *framebuffersink);
 
 /* Local functions. */
 static void gst_drmsink_reset (GstDrmsink *drmsink);
-static void gst_drmsink_vblank_handler (int fd, unsigned int sequence, unsigned int tv_sec,
-    unsigned int tv_usec, void *user_data);
+static void gst_drmsink_vblank_handler (int fd, unsigned int sequence,
+    unsigned int tv_sec, unsigned int tv_usec, void *user_data);
 static void gst_drmsink_page_flip_handler (int fd,  unsigned int sequence,
     unsigned int tv_sec, unsigned int tv_usec, void *user_data);
 static void gst_drmsink_flush_drm_events (GstDrmsink *drmsink);
@@ -204,7 +208,8 @@ static void
 gst_drmsink_class_init (GstDrmsinkClass* klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
-  GstFramebufferSinkClass *framebuffer_sink_class = GST_FRAMEBUFFERSINK_CLASS (klass);
+  GstFramebufferSinkClass *framebuffer_sink_class =
+      GST_FRAMEBUFFERSINK_CLASS (klass);
 
   gobject_class->set_property = gst_drmsink_set_property;
   gobject_class->get_property = gst_drmsink_get_property;
@@ -224,12 +229,16 @@ gst_drmsink_class_init (GstDrmsinkClass* klass)
       g_param_spec_int ("connector", "Connector", "DRM connector id",
       0, G_MAXINT32, 0, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  framebuffer_sink_class->open_hardware = GST_DEBUG_FUNCPTR (gst_drmsink_open_hardware);
-  framebuffer_sink_class->close_hardware = GST_DEBUG_FUNCPTR (gst_drmsink_close_hardware);
-  framebuffer_sink_class->wait_for_vsync = GST_DEBUG_FUNCPTR (gst_drmsink_wait_for_vsync);
-  framebuffer_sink_class->pan_display = GST_DEBUG_FUNCPTR (gst_drmsink_pan_display);
-  framebuffer_sink_class->video_memory_allocator_new = GST_DEBUG_FUNCPTR (
-      gst_drmsink_video_memory_allocator_new);
+  framebuffer_sink_class->open_hardware =
+      GST_DEBUG_FUNCPTR (gst_drmsink_open_hardware);
+  framebuffer_sink_class->close_hardware =
+      GST_DEBUG_FUNCPTR (gst_drmsink_close_hardware);
+  framebuffer_sink_class->wait_for_vsync =
+      GST_DEBUG_FUNCPTR (gst_drmsink_wait_for_vsync);
+  framebuffer_sink_class->pan_display =
+      GST_DEBUG_FUNCPTR (gst_drmsink_pan_display);
+  framebuffer_sink_class->video_memory_allocator_new =
+      GST_DEBUG_FUNCPTR (gst_drmsink_video_memory_allocator_new);
 }
 
 /* Class member functions. */
@@ -240,12 +249,15 @@ gst_drmsink_init (GstDrmsink *drmsink) {
 
   drmsink->fd = -1;
 
-  /* Override the default value of the device property from GstFramebufferSink. */
+  /* Override the default value of the device property from
+     GstFramebufferSink. */
   framebuffersink->device = g_strdup (DEFAULT_DRM_DEVICE);
-  /* Override the default value of the pan-does-vsync property from GstFramebufferSink. */
+  /* Override the default value of the pan-does-vsync property from
+     GstFramebufferSink. */
   framebuffersink->pan_does_vsync = TRUE;
-  /* Override the default value of the preserve-par property from GstFramebufferSink. */
-  /* The option is not supported because drmsink doesn't support hardware scaling. */
+  /* Override the default value of the preserve-par property from
+     GstFramebufferSink. The option is not supported because drmsink
+     doesn't support hardware scaling. */
   framebuffersink->preserve_par = FALSE;
 
   /* Set the initial values of the properties.*/
@@ -433,8 +445,9 @@ gst_drmsink_reset (GstDrmsink *drmsink)
 }
 
 static gboolean
-gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *info,
-    gsize *video_memory_size, gsize *pannable_video_memory_size)
+gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink,
+    GstVideoInfo *info, gsize *video_memory_size,
+    gsize *pannable_video_memory_size)
 {
   GstDrmsink *drmsink = GST_DRMSINK (framebuffersink);
 
@@ -461,7 +474,8 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
 
   res = drmGetCap (drmsink->fd, DRM_CAP_DUMB_BUFFER, &has_dumb_buffers);
   if (res < 0 || !has_dumb_buffers) {
-    GST_DRMSINK_MESSAGE_OBJECT (drmsink, "DRM device does not support dumb buffers");
+    GST_DRMSINK_MESSAGE_OBJECT (drmsink,
+        "DRM device does not support dumb buffers");
     return FALSE;
   }
 
@@ -473,8 +487,10 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
   /* Print an overview of detected connectors/modes. */
   for (i = 0; i < drmsink->resources->count_connectors; i++) {
     int j;
-    connector = drmModeGetConnector(drmsink->fd, drmsink->resources->connectors[i]);
-    s = g_strdup_printf ("DRM connector found, id = %d, type = %d, connected = %d",
+    connector = drmModeGetConnector(drmsink->fd,
+        drmsink->resources->connectors[i]);
+    s = g_strdup_printf (
+        "DRM connector found, id = %d, type = %d, connected = %d",
         connector->connector_id, connector->connector_type,
         connector->connection == DRM_MODE_CONNECTED);
     GST_INFO_OBJECT (drmsink, s);
@@ -492,7 +508,8 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
   if (drmsink->preferred_connector_id >= 0) {
     /* Connector specified as property. */
     for (i = 0; i < drmsink->resources->count_connectors; i++) {
-      connector = drmModeGetConnector(drmsink->fd, drmsink->resources->connectors[i]);
+      connector = drmModeGetConnector(drmsink->fd, 
+          drmsink->resources->connectors[i]);
       if (!connector)
         continue;
 
@@ -513,18 +530,21 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
   else {
     /* Look for active connectors. */
     for (i = 0; i < drmsink->resources->count_connectors; i++) {
-      connector = drmModeGetConnector(drmsink->fd, drmsink->resources->connectors[i]);
+      connector = drmModeGetConnector(drmsink->fd,
+          drmsink->resources->connectors[i]);
       if (!connector)
         continue;
 
-      if (connector->connection == DRM_MODE_CONNECTED && connector->count_modes > 0)
+      if (connector->connection == DRM_MODE_CONNECTED &&
+          connector->count_modes > 0)
         break;
 
       drmModeFreeConnector(connector);
     }
 
     if (i == drmsink->resources->count_connectors) {
-      GST_DRMSINK_MESSAGE_OBJECT (drmsink, "No currently active DRM connector found");
+      GST_DRMSINK_MESSAGE_OBJECT (drmsink,
+          "No currently active DRM connector found");
       drmModeFreeResources (drmsink->resources);
       return FALSE;
     }
@@ -562,21 +582,22 @@ gst_drmsink_open_hardware (GstFramebufferSink *framebuffersink, GstVideoInfo *in
   }
 #endif
 
-  gst_video_info_set_format (info, GST_VIDEO_FORMAT_BGRx, drmsink->screen_rect.w,
-      drmsink->screen_rect.h);
+  gst_video_info_set_format (info, GST_VIDEO_FORMAT_BGRx,
+      drmsink->screen_rect.w, drmsink->screen_rect.h);
   size = GST_VIDEO_INFO_COMP_STRIDE (info, 0) * GST_VIDEO_INFO_HEIGHT (info);
 
   /* GstFramebufferSink expects the amount of usable video memory to be
-     be set. Because DRM doesn't really allow querying of available video memory,
-     assume three screen buffers are available and rely on a specific setting of
-     the video-memory property in order to use more video memory. */
+     be set. Because DRM doesn't really allow querying of available video
+     memory, assume three screen buffers are available and rely on a specific
+     setting of the video-memory property in order to use more video memory. */
   *video_memory_size = size * 3 + 1024;
   if (framebuffersink->max_video_memory_property > 0)
     *video_memory_size = (guint64)framebuffersink->max_video_memory_property
         * 1024 * 1024;
   *pannable_video_memory_size = *video_memory_size;
 
-  s = g_strdup_printf("Successfully initialized DRM, connector = %d, mode = %dx%d",
+  s = g_strdup_printf("Successfully initialized DRM, connector = %d, "
+      "mode = %dx%d",
       drmsink->connector_id, drmsink->screen_rect.w, drmsink->screen_rect.h);
   GST_DRMSINK_MESSAGE_OBJECT (drmsink, s);
   g_free (s);
@@ -671,7 +692,8 @@ typedef struct
 } GstDrmSinkVideoMemoryAllocatorClass;
 
 GType gst_drmsink_video_memory_allocator_get_type (void);
-G_DEFINE_TYPE (GstDrmSinkVideoMemoryAllocator, gst_drmsink_video_memory_allocator, GST_TYPE_ALLOCATOR);
+G_DEFINE_TYPE (GstDrmSinkVideoMemoryAllocator,
+    gst_drmsink_video_memory_allocator, GST_TYPE_ALLOCATOR);
 
 typedef struct
 {
@@ -704,13 +726,13 @@ gst_drmsink_video_memory_allocator_alloc (GstAllocator *allocator, gsize size,
 
 #ifdef LAZY_ALLOCATION
 static GstMemory *
-gst_drmsink_video_memory_allocator_alloc_actual (GstAllocator *allocator, gsize size,
-GstAllocationParams *params, GstDrmSinkVideoMemory *mem)
+gst_drmsink_video_memory_allocator_alloc_actual (GstAllocator *allocator,
+    gsize size, GstAllocationParams *params, GstDrmSinkVideoMemory *mem)
 {
 #else
 static GstMemory *
 gst_drmsink_video_memory_allocator_alloc (GstAllocator *allocator, gsize size,
-GstAllocationParams *params)
+    GstAllocationParams *params)
 {
   GstDrmSinkVideoMemory *mem;
 #endif
@@ -731,14 +753,16 @@ GstAllocationParams *params)
 
   mem->creq.height = drmsink_video_memory_allocator->h;
   mem->creq.width = drmsink_video_memory_allocator->w;
-  mem->creq.bpp = GST_VIDEO_FORMAT_INFO_PSTRIDE (&drmsink_video_memory_allocator->format_info, 0) * 8;
+  mem->creq.bpp = GST_VIDEO_FORMAT_INFO_PSTRIDE (
+      &drmsink_video_memory_allocator->format_info, 0) * 8;
   mem->creq.flags = 0;
 
   /* handle, pitch and size will be returned in the creq struct. */
-  ret = drmIoctl (drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_CREATE_DUMB,
-      &mem->creq);
+  ret = drmIoctl (drmsink_video_memory_allocator->drmsink->fd,
+      DRM_IOCTL_MODE_CREATE_DUMB, &mem->creq);
   if (ret < 0) {
-    GST_DRMSINK_MESSAGE_OBJECT (drmsink_video_memory_allocator->drmsink, "Creating dumb drm buffer failed");
+    GST_DRMSINK_MESSAGE_OBJECT (drmsink_video_memory_allocator->drmsink,
+        "Creating dumb drm buffer failed");
 #ifndef LAZY_ALLOCATION
     g_slice_free (GstDrmSinkVideoMemory, mem);
 #endif
@@ -747,13 +771,16 @@ GstAllocationParams *params)
   }
 
   depth = 0;
-  for (i = 0; i < GST_VIDEO_FORMAT_INFO_N_COMPONENTS (&drmsink_video_memory_allocator->format_info); i++)
-    depth += GST_VIDEO_FORMAT_INFO_DEPTH (&drmsink_video_memory_allocator->format_info, i);
+  for (i = 0; i < GST_VIDEO_FORMAT_INFO_N_COMPONENTS (
+      &drmsink_video_memory_allocator->format_info); i++)
+    depth += GST_VIDEO_FORMAT_INFO_DEPTH (
+        &drmsink_video_memory_allocator->format_info, i);
 
   /* create framebuffer object for the dumb-buffer */
   ret = drmModeAddFB (drmsink_video_memory_allocator->drmsink->fd,
-      drmsink_video_memory_allocator->w, drmsink_video_memory_allocator->h, depth,
-      GST_VIDEO_FORMAT_INFO_PSTRIDE (&drmsink_video_memory_allocator->format_info, 0) * 8,
+      drmsink_video_memory_allocator->w, drmsink_video_memory_allocator->h,
+      depth, GST_VIDEO_FORMAT_INFO_PSTRIDE (
+      &drmsink_video_memory_allocator->format_info, 0) * 8,
       mem->creq.pitch, mem->creq.handle, &mem->fb);
   if (ret) {
     /* frame buffer creation failed; see "errno" */
@@ -767,8 +794,8 @@ GstAllocationParams *params)
   /* prepare buffer for memory mapping */
   memset (&mem->mreq, 0, sizeof(mem->mreq));
   mem->mreq.handle = mem->creq.handle;
-  ret = drmIoctl (drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_MAP_DUMB,
-      &mem->mreq);
+  ret = drmIoctl (drmsink_video_memory_allocator->drmsink->fd,
+      DRM_IOCTL_MODE_MAP_DUMB, &mem->mreq);
   if (ret) {
     GST_DRMSINK_MESSAGE_OBJECT (drmsink_video_memory_allocator->drmsink,
         "DRM buffer preparation failed.\n");
@@ -776,10 +803,11 @@ GstAllocationParams *params)
     goto fail_destroy;
   }
 
-  /* mem->mreq.offset now contains the new offset that can be used with mmap() */
+  /* mem->mreq.offset now contains the new offset that can be used with mmap */
 
   /* perform actual memory mapping */
-  mem->map_address = mmap (0, mem->creq.size, PROT_READ | PROT_WRITE, MAP_SHARED,
+  mem->map_address = mmap (0, mem->creq.size, PROT_READ | PROT_WRITE,
+      MAP_SHARED,
       drmsink_video_memory_allocator->drmsink->fd, mem->mreq.offset);
   if (mem->map_address == MAP_FAILED) {
     /* memory-mapping failed; see "errno" */
@@ -792,7 +820,8 @@ GstAllocationParams *params)
 #ifndef LAZY_ALLOCATION
   gst_memory_init (GST_MEMORY_CAST (mem), GST_MEMORY_FLAG_NO_SHARE |
       GST_MEMORY_FLAG_VIDEO_MEMORY,
-      (GstAllocator *)drmsink_video_memory_allocator, NULL, size, align, 0, size);
+      (GstAllocator *)drmsink_video_memory_allocator, NULL, size, align, 0,
+      size);
 #endif
 
   drmsink_video_memory_allocator->total_allocated += size;
@@ -807,7 +836,8 @@ GstAllocationParams *params)
 fail_destroy :
 
     dreq.handle = mem->creq.handle;
-    drmIoctl (drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
+    drmIoctl (drmsink_video_memory_allocator->drmsink->fd,
+        DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
 #ifndef LAZY_ALLOCATION
     g_slice_free (GstDrmSinkVideoMemory, mem);
 #endif
@@ -816,7 +846,8 @@ fail_destroy :
 }
 
 static void
-gst_drmsink_video_memory_allocator_free (GstAllocator * allocator, GstMemory * mem)
+gst_drmsink_video_memory_allocator_free (GstAllocator * allocator,
+    GstMemory * mem)
 {
   GstDrmSinkVideoMemoryAllocator *drmsink_video_memory_allocator =
       (GstDrmSinkVideoMemoryAllocator *)allocator;
@@ -837,7 +868,8 @@ gst_drmsink_video_memory_allocator_free (GstAllocator * allocator, GstMemory * m
 
   munmap (vmem->map_address, vmem->creq.size);
   dreq.handle = vmem->creq.handle;
-  drmIoctl (drmsink_video_memory_allocator->drmsink->fd, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
+  drmIoctl (drmsink_video_memory_allocator->drmsink->fd,
+      DRM_IOCTL_MODE_DESTROY_DUMB, &dreq);
 
   g_slice_free (GstDrmSinkVideoMemory, vmem);
 
@@ -848,16 +880,16 @@ static gpointer
 gst_drmsink_video_memory_map (GstMemory * mem, gsize maxsize, GstMapFlags flags)
 {
   GstDrmSinkVideoMemory *vmem = (GstDrmSinkVideoMemory *)mem;
-  GST_DEBUG ("video_memory_map called, mem = %p, maxsize = %d, flags = %d, data = %p\n", mem,
-      maxsize, flags, vmem->map_address);
+  GST_DEBUG ("video_memory_map called, mem = %p, maxsize = %d, flags = %d, "
+      "data = %p\n", mem, maxsize, flags, vmem->map_address);
 
   if (flags & GST_MAP_READ)
     GST_DEBUG ("Mapping video memory for reading is slow.\n");
 
 #ifdef LAZY_ALLOCATION
   if (!vmem->allocated) {
-    if (!gst_drmsink_video_memory_allocator_alloc_actual (mem->allocator, mem->maxsize, NULL,
-        vmem))
+    if (!gst_drmsink_video_memory_allocator_alloc_actual (
+        mem->allocator, mem->maxsize, NULL, vmem))
       return NULL;
     vmem->allocated = TRUE;
   }
@@ -875,7 +907,9 @@ gst_drmsink_video_memory_unmap (GstMemory * mem)
 
 
 static void
-gst_drmsink_video_memory_allocator_class_init (GstDrmSinkVideoMemoryAllocatorClass * klass) {
+gst_drmsink_video_memory_allocator_class_init (
+    GstDrmSinkVideoMemoryAllocatorClass * klass)
+{
   GstAllocatorClass * allocator_class = GST_ALLOCATOR_CLASS (klass);
 
   allocator_class->alloc = gst_drmsink_video_memory_allocator_alloc;
@@ -883,7 +917,9 @@ gst_drmsink_video_memory_allocator_class_init (GstDrmSinkVideoMemoryAllocatorCla
 }
 
 static void
-gst_drmsink_video_memory_allocator_init (GstDrmSinkVideoMemoryAllocator *video_memory_allocator) {
+gst_drmsink_video_memory_allocator_init (
+    GstDrmSinkVideoMemoryAllocator *video_memory_allocator)
+{
   GstAllocator * alloc = GST_ALLOCATOR_CAST (video_memory_allocator);
 
   alloc->mem_type = "drmsink_video_memory";
@@ -893,7 +929,7 @@ gst_drmsink_video_memory_allocator_init (GstDrmSinkVideoMemoryAllocator *video_m
 
 static GstAllocator *
 gst_drmsink_video_memory_allocator_new (GstFramebufferSink *framebuffersink,
-GstVideoInfo *info, gboolean pannable, gboolean is_overlay)
+    GstVideoInfo *info, gboolean pannable, gboolean is_overlay)
 {
   GstDrmsink *drmsink = GST_DRMSINK (framebuffersink);
   GstDrmSinkVideoMemoryAllocator *drmsink_video_memory_allocator =
@@ -903,10 +939,11 @@ GstVideoInfo *info, gboolean pannable, gboolean is_overlay)
   drmsink_video_memory_allocator->drmsink = drmsink;
   drmsink_video_memory_allocator->w = GST_VIDEO_INFO_WIDTH (info);
   drmsink_video_memory_allocator->h = GST_VIDEO_INFO_HEIGHT (info);
-  drmsink_video_memory_allocator->format_info = *(GstVideoFormatInfo *)info->finfo;
+  drmsink_video_memory_allocator->format_info =
+      *(GstVideoFormatInfo *)info->finfo;
   drmsink_video_memory_allocator->total_allocated = 0;
   g_sprintf (s, "drmsink_video_memory_%p", drmsink_video_memory_allocator);
-  gst_allocator_register (s, gst_object_ref (drmsink_video_memory_allocator) );
+  gst_allocator_register (s, gst_object_ref (drmsink_video_memory_allocator));
   str = g_strdup_printf ("Created video memory allocator %s, %dx%d, format %s",
       s, drmsink_video_memory_allocator->w, drmsink_video_memory_allocator->h,
       gst_video_format_to_string (GST_VIDEO_INFO_FORMAT (info)));
@@ -979,7 +1016,8 @@ gst_drmsink_pan_display (GstFramebufferSink *framebuffersink,
   uint32_t connectors[1];
   gchar *s;
 
-  GST_LOG_OBJECT (framebuffersink, "pan_display called, mem = %p, map_address = %p",
+  GST_LOG_OBJECT (framebuffersink,
+      "pan_display called, mem = %p, map_address = %p",
       vmem, vmem->map_address);
 
   if (!drmsink->crtc_mode_initialized) {
@@ -995,14 +1033,15 @@ gst_drmsink_pan_display (GstFramebufferSink *framebuffersink,
   gst_drmsink_flush_drm_events (drmsink);
 
   if (drmsink->page_flip_pending) {
-    GST_INFO_OBJECT (drmsink, "pan_display: previous page flip still pending, skipping");
+    GST_INFO_OBJECT (drmsink,
+        "pan_display: previous page flip still pending, skipping");
     return;
   }
 
   drmsink->page_flip_occurred = FALSE;
   drmsink->page_flip_pending = TRUE;
-  if (drmModePageFlip (drmsink->fd, drmsink->crtc_id, vmem->fb, DRM_MODE_PAGE_FLIP_EVENT,
-      drmsink)) {
+  if (drmModePageFlip (drmsink->fd, drmsink->crtc_id, vmem->fb,
+      DRM_MODE_PAGE_FLIP_EVENT, drmsink)) {
     GST_ERROR_OBJECT (drmsink, "drmModePageFlip failed");
     return;
   }

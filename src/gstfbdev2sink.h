@@ -28,11 +28,15 @@ G_BEGIN_DECLS
 
 /* Main class. */
 
-#define GST_TYPE_FBDEV2SINK   (gst_fbdev2sink_get_type())
-#define GST_FBDEV2SINK(obj)   (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FBDEV2SINK,GstFbdev2sink))
-#define GST_FBDEV2SINK_CLASS(klass)   (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FBDEV2SINK,GstFbdev2sinkClass))
-#define GST_IS_FBDEV2SINK(obj)   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_FBDEV2SINK))
-#define GST_IS_FBDEV2SINK_CLASS(obj)   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_FBDEV2SINK))
+#define GST_TYPE_FBDEV2SINK (gst_fbdev2sink_get_type ())
+#define GST_FBDEV2SINK(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), \
+    GST_TYPE_FBDEV2SINK, GstFbdev2sink))
+#define GST_FBDEV2SINK_CLASS(klass) (G_TYPE_CHECK_CLASS_CAST ((klass), \
+    GST_TYPE_FBDEV2SINK, GstFbdev2sinkClass))
+#define GST_IS_FBDEV2SINK(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), \
+    GST_TYPE_FBDEV2SINK))
+#define GST_IS_FBDEV2SINK_CLASS(obj) (G_TYPE_CHECK_CLASS_TYPE ((klass), \
+    GST_TYPE_FBDEV2SINK))
 
 typedef struct _GstFbdev2sink GstFbdev2sink;
 typedef struct _GstFbdev2sinkClass GstFbdev2sinkClass;

@@ -127,7 +127,8 @@ GST_STATIC_PAD_TEMPLATE ("sink",
 /* Class initialization. */
 
 #define gst_fbdev2sink_parent_class fbdevframebuffersink_parent_class
-G_DEFINE_TYPE_WITH_CODE (GstFbdev2sink, gst_fbdev2sink, GST_TYPE_FBDEVFRAMEBUFFERSINK,
+G_DEFINE_TYPE_WITH_CODE (GstFbdev2sink, gst_fbdev2sink,
+  GST_TYPE_FBDEVFRAMEBUFFERSINK,
   GST_DEBUG_CATEGORY_INIT (gst_fbdev2sink_debug_category, "fbdev2sink", 0,
   "debug category for fbdev2sink element"));
 
@@ -152,7 +153,8 @@ static void
 gst_fbdev2sink_init (GstFbdev2sink *fbdev2sink) {
   GstFramebufferSink *framebuffersink = GST_FRAMEBUFFERSINK (fbdev2sink);
 
-  /* Override the default value of the hardware-overlay property from GstFramebufferSink. */
+  /* Override the default value of the hardware-overlay property from
+     GstFramebufferSink. */
   framebuffersink->use_hardware_overlay = FALSE;
 }
 

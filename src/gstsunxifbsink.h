@@ -33,11 +33,16 @@ typedef struct _GstSunxifbsinkAllocator GstSunxifbsinkAllocator;
 
 /* Main class. */
 
-#define GST_TYPE_SUNXIFBSINK   (gst_sunxifbsink_get_type())
-#define GST_SUNXIFBSINK(obj)   (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_SUNXIFBSINK,GstSunxifbsink))
-#define GST_SUNXIFBSINK_CLASS(klass)   (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_SUNXIFBSINK,GstSunxifbsinkClass))
-#define GST_IS_SUNXIFBSINK(obj)   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_SUNXIFBSINK))
-#define GST_IS_SUNXIFBSINK_CLASS(obj)   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_SUNXIFBSINK))
+#define GST_TYPE_SUNXIFBSINK (gst_sunxifbsink_get_type ())
+#define GST_SUNXIFBSINK(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), \
+    GST_TYPE_SUNXIFBSINK, GstSunxifbsink))
+#define GST_SUNXIFBSINK_CLASS(klass) \
+    (G_TYPE_CHECK_CLASS_CAST ((klass), \
+    GST_TYPE_SUNXIFBSINK, GstSunxifbsinkClass))
+#define GST_IS_SUNXIFBSINK(obj) \
+    (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_SUNXIFBSINK))
+#define GST_IS_SUNXIFBSINK_CLASS(klass) \
+    (G_TYPE_CHECK_CLASS_TYPE ((klass), GST_TYPE_SUNXIFBSINK))
 
 typedef struct _GstSunxifbsink GstSunxifbsink;
 typedef struct _GstSunxifbsinkClass GstSunxifbsinkClass;
