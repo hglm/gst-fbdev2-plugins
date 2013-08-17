@@ -154,10 +154,17 @@ DRM does not require root priviledges.
 Example launch line using the hardware scaler:
 
 gst-launch-1.0 videotestsrc horizontal-speed=5 ! sunxifbsink buffer-pool=true \
-fps=60 graphics-mode=false pan-does-vsync=true full-screen=true >output
+fps=60 pan-does-vsync=true full-screen=true overlay-format=BGRx >output
 
-This should show a very smooth scrolling test pattern. The 320x240 video
+This should show a very smooth scrolling test pattern. The 320x240 BGRx video
 output of videotestsrc is scaled to the native full-screen resolution.
+
+gst-launch-1.0 videotestsrc horizontal-speed=5 ! sunxifbsink buffer-pool=true \
+fps=60 pan-does-vsync=true full-screen=true overlay-format=Y444 \
+width-before-scaling=640 height-before-scaling=480 >output
+
+In this pipeline, 640x480 video output of videotestsrc in Y444 format is scaled
+to the native full-screen resolution.
 
 gst-launch-1.0 playbin uri=file:///home/me/videos/video.mp4 \
 video-sink="sunxifbsink full-screen=true graphics-mode=true pan-does-vsync=true \
@@ -168,15 +175,19 @@ This plays a video file using a full-screen hardware overlay in Y444 format
 
 Supported overlay formats:
 
-I420	Planar 4:2:0 YUV (three planes)
-YV12	Planar 4:2:0 YUV (U and V planes swapped)
-NV12	Planar 4:2:0 YUV (U and V planes combined)
-NV21	Planar 4:2:0 YUV (U and V planes combined, U and V swapped)
 YUY2	Packed 4:2:2 YUV
 UYVY	Packed 4:2:2 YUV
 Y444	Planar 4:4:4 YUV
 AYUV	Packed AYUV with alpha channel (A0-Y0-U0-V0 ...)
 BGRx	RGB
+
+The following overlay formats are supported, but only for even source video
+widths:
+
+I420	Planar 4:2:0 YUV (three planes)
+YV12	Planar 4:2:0 YUV (U and V planes swapped)
+NV12	Planar 4:2:0 YUV (U and V planes combined)
+NV21	Planar 4:2:0 YUV (U and V planes combined, U and V swapped)
 
 *** Troubleshooting ***
 

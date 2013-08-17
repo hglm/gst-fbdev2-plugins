@@ -134,14 +134,18 @@ const gchar *message) {
     GST_INFO_OBJECT (sunxifbsink, message);
 }
 
+#define ALIGNMENT_GET_ALIGN_BYTES(offset, align) \
+    (((align) + 1 - ((offset) & (align))) & (align))
+#define ALIGNMENT_GET_ALIGNED(offset, align) \
+    ((offset) + ALIGNMENT_GET_ALIGN_BYTES(offset, align))
+#define ALIGNMENT_APPLY(offset, align) \
+    offset = ALIGNMENT_GET_ALIGNED(offset, align);
+
 /* Class function prototypes. */
 static gboolean gst_sunxifbsink_open_hardware (GstFramebufferSink *framebuffersink,
     GstVideoInfo *info, gsize *video_memory_size, gsize *pannable_video_memory_size);
 static void gst_sunxifbsink_close_hardware (GstFramebufferSink *framebuffersink);
 static GstVideoFormat *gst_sunxifbsink_get_supported_overlay_formats (GstFramebufferSink *framebuffersink);
-static void gst_sunxifbsink_get_overlay_alignment_restrictions (GstFramebufferSink *framebuffersink,
-    GstVideoFormat format, int *overlay_alignment, int *overlay_scanline_alignment,
-    int *overlay_plane_alignment, gboolean *overlay_scanline_alignment_is_fixed);
 static gboolean gst_sunxifbsink_get_overlay_video_alignment (GstFramebufferSink *framebuffersink,
     GstVideoInfo *video_info, GstFramebufferSinkOverlayVideoAlignment *video_alignment, gint *overlay_align,
     gboolean *video_alignment_matches);
@@ -166,14 +170,14 @@ enum
         "; " GST_VIDEO_CAPS_MAKE ("BGRx") \
         "; " GST_VIDEO_CAPS_MAKE ("xRGB") \
         "; " GST_VIDEO_CAPS_MAKE ("xBGR") \
-        "; " GST_VIDEO_CAPS_MAKE ("I420") \
-        "; " GST_VIDEO_CAPS_MAKE ("YV12") \
-        "; " GST_VIDEO_CAPS_MAKE ("NV12") \
-        "; " GST_VIDEO_CAPS_MAKE ("NV21") \
         "; " GST_VIDEO_CAPS_MAKE ("YUY2") \
         "; " GST_VIDEO_CAPS_MAKE ("UYVY") \
         "; " GST_VIDEO_CAPS_MAKE ("Y444") \
-        "; " GST_VIDEO_CAPS_MAKE ("AYUV") ", " \
+        "; " GST_VIDEO_CAPS_MAKE ("AYUV") \
+        "; " GST_VIDEO_CAPS_MAKE ("I420") \
+        "; " GST_VIDEO_CAPS_MAKE ("YV12") \
+        "; " GST_VIDEO_CAPS_MAKE ("NV12") \
+        "; " GST_VIDEO_CAPS_MAKE ("NV21") ", " \
         "framerate = (fraction) [ 0, MAX ], " \
         "width = (int) [ 1, MAX ], " "height = (int) [ 1, MAX ]"
 
@@ -185,15 +189,17 @@ GST_STATIC_PAD_TEMPLATE ("sink",
     );
 
 static GstVideoFormat sunxifbsink_supported_overlay_formats_table[] = {
-  GST_VIDEO_FORMAT_I420,
-  GST_VIDEO_FORMAT_YV12,
-  GST_VIDEO_FORMAT_NV12,
-  GST_VIDEO_FORMAT_NV21,
+  /* List the formats that support odds widths first. */
   GST_VIDEO_FORMAT_YUY2,
   GST_VIDEO_FORMAT_UYVY,
   GST_VIDEO_FORMAT_Y444,
   GST_VIDEO_FORMAT_AYUV,
   GST_VIDEO_FORMAT_BGRx,
+  /* These formats do not properly support odd widths. */
+  GST_VIDEO_FORMAT_I420,
+  GST_VIDEO_FORMAT_YV12,
+  GST_VIDEO_FORMAT_NV12,
+  GST_VIDEO_FORMAT_NV21,
   GST_VIDEO_FORMAT_UNKNOWN
 };
 
@@ -315,20 +321,6 @@ gst_sunxifbsink_get_supported_overlay_formats (GstFramebufferSink *framebuffersi
   return sunxifbsink_supported_overlay_formats_table;
 }
 
-#if 0
-
-static void gst_sunxifbsink_get_overlay_alignment_restrictions (GstFramebufferSink *framebuffersink,
-GstVideoFormat format, int *overlay_alignment, int *overlay_scanline_alignment,
-int *overlay_plane_alignment, gboolean *overlay_scanline_alignment_is_fixed)
-{
-  *overlay_alignment = 15;
-  *overlay_scanline_alignment = 15;
-  *overlay_plane_alignment = 15;
-  *overlay_scanline_alignment_is_fixed = TRUE;
-}
-
-#endif
-
 /* Return the video alignment (top/bottom/left/right padding and stride alignment for each plane) that
    is required to display the overlay described by video_info. Also returns the alignment requirement
    of the start address of the overlay in video memory. video_alignment_matches is set to TRUE if
@@ -340,11 +332,25 @@ gst_sunxifbsink_get_overlay_video_alignment(GstFramebufferSink *framebuffersink,
     GstFramebufferSinkOverlayVideoAlignment *video_alignment, gint *overlay_align,
     gboolean *video_alignment_matches)
 {
-   *overlay_align = 15;
-   /* Require scanlines to aligned to 16-byte boundaries. */
-   gst_framebuffersink_set_overlay_video_alignment_from_scanline_alignment (framebuffersink, video_info,
-       15, video_alignment, video_alignment_matches);
-   return TRUE;
+  GstVideoFormat format;
+  format = GST_VIDEO_INFO_FORMAT (video_info);
+  if (format == GST_VIDEO_FORMAT_I420 ||
+      format == GST_VIDEO_FORMAT_YV12 ||
+      format == GST_VIDEO_FORMAT_NV12 ||
+      format == GST_VIDEO_FORMAT_NV21) {
+    if (GST_VIDEO_INFO_WIDTH (video_info) & 1)
+      /* Hardware overlay not supported for odd widths for all planar formats except Y444.
+         Although it almost works for odd widths, there is an artifact line at the right of the scaled
+         area, related to the alignment requirements of the width. */
+      return FALSE;
+  }
+  *overlay_align = 15;
+  /* For the Allwinner hardware overlay, scanlines need to be aligned to pixel boundaries with a minimum
+     alignment of word-aligned. This is a good match for the buffer format generally provided by
+     upstream, so direct video memory buffer pool streaming is almost always possible. */
+  gst_framebuffersink_set_overlay_video_alignment_from_scanline_alignment (framebuffersink, video_info,
+      3, TRUE, video_alignment, video_alignment_matches);
+  return TRUE;
 }
 
 /*
@@ -353,7 +359,7 @@ gst_sunxifbsink_get_overlay_video_alignment(GstFramebufferSink *framebuffersink,
  * framebuffersink->overlay_plane_offset[i] is the offset in bytes of each plane. Any
  *   top or left padding returned by get_overlay_video_alignment() will come first.
  * framebuffersink->overlay_scanline_offset[i] is the offset in bytes of the first pixel of each
- *   scanline for each plane (coresponding with the left padding * bytes per pixel). Usually 0.
+ *   scanline for each plane (corresponding with the left padding * bytes per pixel). Usually 0.
  * framebuffersink->overlay_scanline_stride[i] is the scanline stride in bytes of each plane.
  * framebuffersink->videosink.width is the source width.
  * framebuffersink->videosink.height is the source height.
@@ -429,7 +435,9 @@ GstVideoFormat format)
       fb.seq = DISP_SEQ_P3210;
       fb.mode = DISP_MOD_NON_MB_PLANAR;
     }
-    fb.size.width = framebuffersink->videosink.width;
+    fb.size.width = framebuffersink->overlay_scanline_stride[0]
+        / (GST_VIDEO_FORMAT_INFO_SCALE_WIDTH (framebuffersink->video_info.finfo, 0, 8)
+        * GST_VIDEO_INFO_COMP_PSTRIDE (&framebuffersink->video_info, 0) / 8);
     fb.size.height = framebuffersink->videosink.height;
 
     tmp[0] = sunxifbsink->framebuffer_id;
@@ -490,7 +498,9 @@ GstVideoFormat format)
       else
         fb.seq = DISP_SEQ_UYVY;
     }
-    fb.size.width = framebuffersink->videosink.width;
+    fb.size.width = framebuffersink->overlay_scanline_stride[0]
+        / (GST_VIDEO_FORMAT_INFO_SCALE_WIDTH (framebuffersink->video_info.finfo, 0, 8)
+        * GST_VIDEO_INFO_COMP_PSTRIDE (&framebuffersink->video_info, 0) / 8);
     fb.mode = DISP_MOD_INTERLEAVED;
 
     tmp[0] = sunxifbsink->framebuffer_id;

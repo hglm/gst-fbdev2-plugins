@@ -142,9 +142,6 @@ struct _GstFramebufferSinkClass
   void (*pan_display) (GstFramebufferSink *framebuffersink, GstMemory *vmem);
   void (*wait_for_vsync) (GstFramebufferSink *framebuffersink);
   GstVideoFormat * (*get_supported_overlay_formats) (GstFramebufferSink *framebuffersink);
-  void (*get_overlay_alignment_restrictions) (GstFramebufferSink *framebuffersink, GstVideoFormat format,
-      int *overlay_alignment, int *overlay_scanline_alignment, int *overlay_plane_alignment,
-      gboolean *overlay_scanline_alignment_is_fixed);
   /* Return the video alignment (top/bottom/left/right padding and stride alignment for each plane) that
      is required to display the overlay described by video_info. Also returns the alignment requirement
      of the start address of the overlay in video memory. video_alignment_matches is set to TRUE if
@@ -167,7 +164,8 @@ GType gst_framebuffersink_get_type (void);
 
 void gst_framebuffersink_set_overlay_video_alignment_from_scanline_alignment (
     GstFramebufferSink *framebuffersink, GstVideoInfo *video_info, gint scanline_align,
-    GstFramebufferSinkOverlayVideoAlignment *video_alignment, gboolean *video_alignment_matches);
+    gboolean strict_alignment, GstFramebufferSinkOverlayVideoAlignment *video_alignment,
+    gboolean *video_alignment_matches);
 
 G_END_DECLS
 

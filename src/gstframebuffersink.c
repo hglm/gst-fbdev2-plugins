@@ -1051,7 +1051,7 @@ gst_framebuffersink_start (GstBaseSink *sink)
   return TRUE;
 }
 
-/* Sets size and frame-rate preferences on caps. */
+/* Sets size, frame-rate and hardware-overlay format preferences on caps. */
 
 static void
 gst_framebuffersink_caps_set_preferences (GstFramebufferSink *framebuffersink, GstCaps *caps,
@@ -1097,6 +1097,15 @@ skip_video_size_request:
         "framerate", GST_TYPE_FRACTION, framebuffersink->fps, 1, NULL);
   else
     gst_caps_set_simple(caps, "framerate", GST_TYPE_FRACTION_RANGE, 0, 1, G_MAXINT, 1, NULL);
+
+  /* Honour specified overlay format. */
+  if (framebuffersink->preferred_overlay_format_str != NULL) {
+    GstVideoFormat f = gst_video_format_from_string (framebuffersink->preferred_overlay_format_str);
+    if (f != GST_VIDEO_FORMAT_UNKNOWN)
+      gst_caps_set_simple (caps,
+          "format", G_TYPE_STRING, gst_video_format_to_string (f), NULL);
+      caps = gst_caps_simplify (caps);
+  }
 }
 
 /* Return default caps, or NULL if no default caps could be not generated. */
@@ -1214,11 +1223,9 @@ gst_framebuffersink_get_caps (GstBaseSink * sink, GstCaps * filter)
   const char *format_str = NULL;
   GstVideoFormat format;
 
-  GST_DEBUG_OBJECT (framebuffersink, "get_caps");
-
   GST_OBJECT_LOCK (framebuffersink);
 
-  GST_LOG_OBJECT (framebuffersink, "get_caps: filter caps: %" GST_PTR_FORMAT "\n", filter);
+  GST_DEBUG_OBJECT (framebuffersink, "get_caps: filter caps: %" GST_PTR_FORMAT "\n", filter);
 
   /* If the screen info hasn't been initialized yet, return the template caps. */
   if (GST_VIDEO_INFO_FORMAT (&framebuffersink->screen_info) == GST_VIDEO_FORMAT_UNKNOWN) {
@@ -1316,264 +1323,12 @@ gst_framebuffersink_get_caps (GstBaseSink * sink, GstCaps * filter)
 
 done_no_store:
 
-  GST_LOG_OBJECT (framebuffersink, "get_caps: returned caps: %" GST_PTR_FORMAT "\n", caps);
+  GST_DEBUG_OBJECT (framebuffersink, "get_caps: returned caps: %" GST_PTR_FORMAT "\n", caps);
 
   GST_OBJECT_UNLOCK (framebuffersink);
 
   return caps;
 }
-
-#if 0
-static GstCaps *
-gst_framebuffersink_get_caps_old (GstBaseSink * sink, GstCaps * filter)
-{
-  GstFramebufferSink *framebuffersink = GST_FRAMEBUFFERSINK (sink);
-  GstCaps *caps;
-  int i;
-  int w, h;
-  int par_n, par_d;
-  int n;
-  gboolean no_par;
-  const char *format_str = NULL;
-  char s[80];
-
-  GST_DEBUG_OBJECT (framebuffersink, "get_caps");
-
-  GST_OBJECT_LOCK (framebuffersink);
-
-  GST_LOG_OBJECT (framebuffersink, "get_caps: filter caps: %" GST_PTR_FORMAT "\n", filter);
-
-  /* If the screen info hasn't been initialized yet, return the template caps. */
-  if (GST_VIDEO_INFO_FORMAT (&framebuffersink->screen_info) == GST_VIDEO_FORMAT_UNKNOWN) {
-    caps = gst_static_pad_template_get_caps (&gst_framebuffersink_sink_template);
-    if (filter) {
-      GstCaps *intersection = gst_caps_intersect_full (filter, caps,
-          GST_CAPS_INTERSECT_FIRST);
-      gst_caps_unref (caps);
-      caps = intersection;
-    }
-    goto done_no_store;
-  }
-
-#if 0
-  /* When filter is NULL (ACCEPT_CAPS query) and we have stored caps. */
-  if (filter == NULL && framebuffersink->have_caps) {
-    caps = gst_caps_ref (framebuffersink->caps);
-    goto done_no_store;
-  }
-#endif
-
-  /* When filter is not NULL (CAPS query), and have already set adjusted dimensions, */
-  /* return the stored caps. */
-  if (filter != NULL && framebuffersink->adjusted_dimensions) {
-    GST_WARNING_OBJECT (framebuffersink, "get_caps called after dimensions adjusted");
-    caps = gst_caps_ref (framebuffersink->caps);
-    goto done_no_store;
-  }
-
-  /* Check whether upstream is reporting video dimensions and par. */
-  no_par = TRUE;
-  if (filter == NULL)
-    n = 0;
-  else
-    n = gst_caps_get_size (filter);
-  w = 0;
-  h = 0;
-  par_n = 0;
-  par_d = 0;
-  for (i = 0; i < n; i++) {
-    const gchar *fs;
-    GstStructure *str = gst_caps_get_structure (filter, i);
-    gst_structure_get_int (str, "width", &w);
-    gst_structure_get_int (str, "height", &h);
-    if (gst_structure_has_field (str, "pixel-aspect-ratio")) {
-      no_par = FALSE;
-      gst_structure_get_fraction (str, "pixel-aspect-ratio", &par_n, &par_d);
-    }
-    fs = gst_structure_get_string (str, "format");
-    if (fs != NULL && format_str == NULL)
-      format_str = fs;
-  }
-
-  /* For a CAPS query, set the caps to the stored ones if we have them, otherwise */
-  /* generate default caps. */
-  if (filter != NULL && framebuffersink->have_caps)
-    caps = gst_caps_ref (framebuffersink->caps);
-  else {
-    caps = gst_framebuffersink_get_default_caps(framebuffersink);
-    if (caps == NULL)
-      goto done_no_store;
-    if (filter == NULL)
-       no_par = FALSE;
-    gst_framebuffersink_caps_set_preferences(framebuffersink, caps, no_par);
-  }
-
-  /* For an ACCEPT query, return the generated default caps. */
-  if (filter == NULL)
-    goto done_no_store;
-
-  /* Wait until upstream reports the video dimensions. */
-  if (w == 0 || h == 0)
-    /* Upstream has not yet confirmed a video size */
-    goto done;
-
-  /* Upstream has confirmed a video size */
-
-  /* Reconfigure output size and preserve aspect ratio when preserve-par */
-  /* property is set and upstream has reported an aspect ratio. */
-  if (framebuffersink->preserve_par && par_d != 0 && par_n != 0) {
-      double ratio;
-      ratio = (double) w / h;
-      if (framebuffersink->requested_video_width != 0 ||
-      framebuffersink->requested_video_height != 0) {
-        int output_width = 0;
-        int output_height = 0;
-        double r;
-        gboolean adjusted_aspect = FALSE;
-        if (framebuffersink->requested_video_width != 0) {
-          output_width = framebuffersink->requested_video_width;
-          if (framebuffersink->requested_video_height != 0)
-            /* Both requested width and height specified. */
-            output_height = framebuffersink->requested_video_height;
-          else {
-            output_height = (double) output_width / ratio;
-            adjusted_aspect = TRUE;
-          }
-        }
-        else if (framebuffersink->requested_video_height != 0) {
-          output_height = framebuffersink->requested_video_height;
-          output_width = (double) output_height * ratio;
-          adjusted_aspect = TRUE;
-        }
-
-        r = (double) output_width / output_height;
-        if (r > ratio + 0.01) {
-          /* Insert black borders on the sides. */
-          output_width = output_width * ratio / r;
-          adjusted_aspect = TRUE;
-        }
-        else if (r < ratio - 0.01) {
-          /* Insert black borders on the top and bottom. */
-          output_height = output_height * r / ratio;
-          adjusted_aspect = TRUE;
-        }
-
-        if (output_width != w || output_height != h) {
-          GstCaps *icaps;
-          GstVideoFormat format;
-
-          /* Intersect and set new output dimensions. */
-          icaps = gst_caps_intersect (caps, filter);
-          gst_caps_unref (caps);
-          caps = icaps;
-
-          /* Try to get the video format from caps that is our preferred video */
-          /* format (supported by overlay). */
-          format = gst_framebuffersink_get_preferred_video_format_from_caps(
-            framebuffersink, caps);
-          if (gst_framebuffersink_video_format_supported_by_overlay (framebuffersink, format)) {
-            /* Set the preferred format. */
-            gst_caps_set_simple(caps,
-                "format", G_TYPE_STRING, gst_video_format_to_string (format), NULL);
-            caps = gst_caps_simplify(caps);
-          }
-          /* If we are not using the hardware overlay, inform upstream to */
-          /* scale to the new size. */
-          else if (!gst_framebuffersink_video_format_supported_by_overlay (framebuffersink,
-              format)) {
-            gst_caps_set_simple(caps,
-                "width", G_TYPE_INT, output_width, NULL);
-            gst_caps_set_simple(caps,
-                "height", G_TYPE_INT, output_height, NULL);
-            gst_caps_set_simple(caps, "pixel-aspect-ratio", GST_TYPE_FRACTION,
-                par_n * output_width * h, par_d * output_height * w, NULL);
-          }
-          if (adjusted_aspect) {
-            sprintf(s, "Preserve aspect ratio: Adjusted output dimensions to %d x %d",
-                output_width, output_height);
-            GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, s);
-          }
-
-          framebuffersink->adjusted_dimensions = TRUE;
-          framebuffersink->adjusted_width = output_width;
-          framebuffersink->adjusted_height = output_height;
-
-          goto done_no_intersect;
-        }
-      }
-  }
-  else {
-    // Do not preserve aspect ratio.
-    if (framebuffersink->requested_video_width != 0 ||
-    framebuffersink->requested_video_height != 0) {
-      int output_width = w;
-      int output_height = h;
-      if (framebuffersink->requested_video_width != 0)
-        output_width = framebuffersink->requested_video_width;
-      if (framebuffersink->requested_video_height != 0)
-        output_height = framebuffersink->requested_video_height;
-
-      if (output_width != w || output_height != h) {
-          GstCaps *icaps;
-          GstVideoFormat format;
-
-          /* Intersect and set new output dimensions. */
-          icaps = gst_caps_intersect (caps, filter);
-          gst_caps_unref (caps);
-          caps = icaps;
-
-          /* Try to get the video format from caps that is our preferred video */
-          /* format (supported by overlay). */
-          format = gst_framebuffersink_get_preferred_video_format_from_caps(
-            framebuffersink, caps);
-          if (gst_framebuffersink_video_format_supported_by_overlay (framebuffersink, format)) {
-            /* Set the preferred format. */
-            gst_caps_set_simple(caps,
-                "format", G_TYPE_STRING, gst_video_format_to_string (format), NULL);
-            caps = gst_caps_simplify(caps);
-          }
-
-          framebuffersink->adjusted_dimensions = TRUE;
-          framebuffersink->adjusted_width = output_width;
-          framebuffersink->adjusted_height = output_height;
-
-          goto done_no_intersect;
-      }
-
-      framebuffersink->adjusted_dimensions = TRUE;
-      framebuffersink->adjusted_width = output_width;
-      framebuffersink->adjusted_height = output_height;
-    }
-  }
-
-done:
-
-  /* Return the intersection of the current caps with the filter caps. */
-  if (filter != NULL) {
-    GstCaps *icaps;
-
-    icaps = gst_caps_intersect (caps, filter);
-    gst_caps_unref (caps);
-    caps = icaps;
-  }
-
-done_no_intersect:
-
-  /* Store the updated caps. */
-  if (framebuffersink->have_caps)
-    gst_caps_unref (framebuffersink->caps);
-  framebuffersink->have_caps = TRUE;
-  framebuffersink->caps = gst_caps_ref (caps);
-
-done_no_store:
-
-  GST_LOG_OBJECT (framebuffersink, "get_caps: returned caps: %" GST_PTR_FORMAT "\n", caps);
-
-  GST_OBJECT_UNLOCK (framebuffersink);
-
-  return caps;
-}
-#endif
 
 /* This function is called from set_caps when we are configured with */
 /* use_buffer_pool=true, and from propose_allocation */
@@ -1659,13 +1414,15 @@ activation_failed:
 
 /* Exported utility function to conveniently convert scanline alignment to the
    GstFramebufferSinkOverlayVideoAlignment information required by the get_overlay_video_alignment
-   class function. */
+   class function if strict_alignment is TRUE scanlines need to be aligned to the alignment
+   defined by scanline_align but should not be aligned to a greater alignment. */
 void
 gst_framebuffersink_set_overlay_video_alignment_from_scanline_alignment (GstFramebufferSink *framebuffersink,
-    GstVideoInfo *video_info, gint scanline_align, GstFramebufferSinkOverlayVideoAlignment *video_alignment,
-    gboolean *video_alignment_matches)
+    GstVideoInfo *video_info, gint scanline_align, gboolean strict_alignment,
+    GstFramebufferSinkOverlayVideoAlignment *video_alignment, gboolean *video_alignment_matches)
 {
-  guint pstride[GST_VIDEO_MAX_PLANES];
+  guint scaled_pstride_bits[GST_VIDEO_MAX_PLANES];
+  int comp[GST_VIDEO_MAX_PLANES];
   int i;
   int n;
   gboolean matches;
@@ -1675,7 +1432,9 @@ gst_framebuffersink_set_overlay_video_alignment_from_scanline_alignment (GstFram
   n = GST_VIDEO_INFO_N_COMPONENTS (video_info);
   for (i = 0; i < n; i++) {
     int plane = GST_VIDEO_INFO_COMP_PLANE (video_info, i);
-    pstride[plane] = GST_VIDEO_INFO_COMP_PSTRIDE (video_info, i);
+    scaled_pstride_bits[plane] = GST_VIDEO_FORMAT_INFO_SCALE_WIDTH (video_info->finfo, i, 8) *
+      GST_VIDEO_INFO_COMP_PSTRIDE (video_info, i);
+    comp[plane] = i;
   }
 
   matches = TRUE;
@@ -1683,20 +1442,39 @@ gst_framebuffersink_set_overlay_video_alignment_from_scanline_alignment (GstFram
   video_alignment->padding_bottom = 0;
   n = GST_VIDEO_INFO_N_PLANES (video_info);
   for (i = 0; i < n; i++) {
-    if (GST_VIDEO_INFO_PLANE_STRIDE (video_info, i) & scanline_align) {
+    gboolean plane_matches;
+    if ((GST_VIDEO_INFO_PLANE_STRIDE (video_info, i) & scanline_align) == 0) {
+      plane_matches = TRUE;
+      if (strict_alignment) {
+        int aligned_stride;
+        int aligned_width_in_bytes;
+        aligned_stride = ALIGNMENT_GET_ALIGNED (GST_VIDEO_INFO_PLANE_STRIDE (video_info, i),
+            scanline_align);
+        aligned_width_in_bytes = ALIGNMENT_GET_ALIGNED ((GST_VIDEO_INFO_WIDTH (video_info) *
+           scaled_pstride_bits[i] + 7) / 8, scanline_align);
+        if (aligned_stride != aligned_width_in_bytes)
+          plane_matches = FALSE;
+      }
+    }
+    else
+      plane_matches = FALSE;
+    if (plane_matches) {
       /* This plane matches the hardware overlay stride alignment requirements. */
+      GST_DEBUG_OBJECT (framebuffersink, "Overlay stride alignment matches for plane %d", i);
       video_alignment->padding_left[i] = 0;
-      video_alignment->padding_right[i] = (GST_VIDEO_INFO_PLANE_STRIDE (video_info, i) -
-          GST_VIDEO_INFO_WIDTH (video_info) * pstride[i]) / pstride[i];
+      video_alignment->padding_right[i] = (GST_VIDEO_INFO_PLANE_STRIDE (video_info, i) * 8 -
+          GST_VIDEO_INFO_WIDTH (video_info) * scaled_pstride_bits[i]) / scaled_pstride_bits[i];
     }
     else {
       /* This plane doesn't match the stride alignment requirement. */
-      int aligned_stride;
-      aligned_stride = ALIGNMENT_GET_ALIGNED (GST_VIDEO_INFO_PLANE_STRIDE (video_info, i),
-          scanline_align);
+      int aligned_width_in_bytes;
+      GST_DEBUG_OBJECT (framebuffersink, "Overlay stride alignment doesn't match for plane %d", i);
+      aligned_width_in_bytes = ALIGNMENT_GET_ALIGNED (GST_VIDEO_FORMAT_INFO_SCALE_WIDTH (
+         video_info->finfo, comp[i], GST_VIDEO_INFO_WIDTH (video_info)) * scaled_pstride_bits[i] / 8,
+         scanline_align);
       video_alignment->padding_left[i] = 0;
-      video_alignment->padding_right[i] = (aligned_stride - GST_VIDEO_INFO_WIDTH (video_info)
-          * pstride[i]) / pstride[i];
+      video_alignment->padding_right[i] = (aligned_width_in_bytes * 8 -
+          GST_VIDEO_INFO_WIDTH (video_info) * scaled_pstride_bits[i]) / scaled_pstride_bits[i];
       matches = FALSE;
     }
     video_alignment->stride_align[i] = scanline_align;
@@ -1721,81 +1499,6 @@ gst_framebuffersink_calculate_plane_widths(GstFramebufferSink *framebuffersink, 
   }
 }
 
-#if 0
-
-static gboolean
-gst_framebuffersink_check_overlay_alignment(GstFramebufferSink *framebuffersink, GstVideoInfo *info,
-gboolean set_overlay_alignment)
-{
-  /* Make sure the source video data obeys the alignment restrictions imposed by the driver. */
-  int n = GST_VIDEO_INFO_N_PLANES (info);
-  int i;
-  if (set_overlay_alignment)
-    framebuffersink->overlay_alignment_is_native = FALSE;
-  for (i = 0; i < n; i++) {
-    int offset;
-    int stride = GST_VIDEO_INFO_PLANE_STRIDE(info, i);
-    int stride_aligned;
-    if ((stride & framebuffersink->overlay_scanline_alignment) != 0) {
-      GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
-          "Video scanline alignment does not meet hardware overlay restrictions (stride doesn't match)");
-      return FALSE;
-    }
-    stride_aligned = ALIGNMENT_GET_ALIGNED(stride, framebuffersink->overlay_scanline_alignment);
-    if (framebuffersink->overlay_scanline_alignment_is_fixed &&
-        stride_aligned != ALIGNMENT_GET_ALIGNED(framebuffersink->source_video_width_in_bytes[i],
-        framebuffersink->overlay_scanline_alignment)) {
-      GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
-          "Video scanline alignment does not meet hardware overlay restrictions (video alignment "
-          "too wide)");
-      return FALSE;
-    }
-    offset = GST_VIDEO_INFO_PLANE_OFFSET(info, i);
-    if ((offset & framebuffersink->overlay_plane_alignment) != 0) {
-      GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
-          "Video plane alignment does not meet hardware overlay restrictions");
-      return FALSE;
-    }
-    if (set_overlay_alignment) {
-      framebuffersink->overlay_scanline_stride[i] = stride;
-      framebuffersink->overlay_plane_offset[i] = offset;
-    }
-  }
-  if (set_overlay_alignment) {
-    framebuffersink->overlay_size = info->size;
-    framebuffersink->overlay_alignment_is_native = TRUE;
-  }
-  return TRUE;
-}
-
-#endif
-
-/* Calculate the organization of overlay data in video memory. */
-
-#if 0
-
-static void gst_framebuffersink_calculate_overlay_size(GstFramebufferSink *framebuffersink,
-GstVideoInfo *info) {
-  int i;
-  n = GST_VIDEO_INFO_N_PLANES (info);
-  int offset = 0;
-  for (i = 0; i < n; i++) {
-    int j;
-    for (j = 0; j < GST_VIDEO_INFO_N_COMPONENTS (info); j++)
-      if (GST_VIDEO_INFO_COMP_PLANE (info, j) == i)
-        break;
-    offset += ALIGNMENT_GET_ALIGN_BYTES(offset, framebuffersink->overlay_plane_alignment);
-    framebuffersink->overlay_plane_offset[i] = offset;
-    int stride = ALIGNMENT_GET_ALIGNED(framebuffersink->source_video_width_in_bytes[i],
-        framebuffersink->overlay_scanline_alignment);
-    framebuffersink->overlay_scanline_stride[i] = stride;
-    offset += GST_VIDEO_FORMAT_INFO_SCALE_HEIGHT (info->finfo, j, GST_VIDEO_INFO_HEIGHT (info)) * stride;
-  }
-  framebuffersink->overlay_size = offset;
-}
-
-#endif
-
 /* Set actual overlay organization in memory.
  *
  * info: The source video info.
@@ -1813,7 +1516,7 @@ GstVideoInfo *info) {
 static void gst_framebuffersink_calculate_overlay_size (GstFramebufferSink *framebuffersink,
 GstVideoInfo *info, GstFramebufferSinkOverlayVideoAlignment *video_alignment, gint overlay_align,
 gboolean video_alignment_matches) {
-  guint pstride[GST_VIDEO_MAX_PLANES];
+  guint scaled_pstride_bits[GST_VIDEO_MAX_PLANES];
   int comp[GST_VIDEO_MAX_PLANES];
   int i;
   int n;
@@ -1823,30 +1526,28 @@ gboolean video_alignment_matches) {
   n = GST_VIDEO_INFO_N_COMPONENTS (info);
   for (i = 0; i < n; i++) {
     int plane = GST_VIDEO_INFO_COMP_PLANE(info, i);
-    pstride[plane] = GST_VIDEO_INFO_COMP_PSTRIDE(info, i);
+    scaled_pstride_bits[plane] = GST_VIDEO_FORMAT_INFO_SCALE_WIDTH (info->finfo, i, 8) *
+      GST_VIDEO_INFO_COMP_PSTRIDE (info, i);
     comp[plane] = i;
   }
   n = GST_VIDEO_INFO_N_PLANES (info);
   int offset = 0;
   for (i = 0; i < n; i++) {
-    int j;
     int padded_width;
     int padded_width_in_bytes;
     int stride;
-    for (j = 0; j < GST_VIDEO_INFO_N_COMPONENTS (info); j++)
-      if (GST_VIDEO_INFO_COMP_PLANE (info, j) == i)
-        break;
     offset += ALIGNMENT_GET_ALIGN_BYTES(offset, video_alignment->stride_align[i]);
     framebuffersink->overlay_plane_offset[i] = offset;
-    framebuffersink->overlay_scanline_offset[i] = GST_VIDEO_FORMAT_INFO_SCALE_WIDTH (info->finfo,
-        comp[i], video_alignment->padding_left[i]) * pstride[i];
+    framebuffersink->overlay_scanline_offset[i] = video_alignment->padding_left[i] *
+        scaled_pstride_bits[i] / 8;
     padded_width = video_alignment->padding_left[i] + GST_VIDEO_INFO_WIDTH (
         info) + video_alignment->padding_right[i];
-    padded_width_in_bytes = GST_VIDEO_FORMAT_INFO_SCALE_WIDTH (info->finfo, comp[i], padded_width) *
-        pstride[i];
+    padded_width_in_bytes = padded_width * scaled_pstride_bits[i] / 8;
     stride = ALIGNMENT_GET_ALIGNED (padded_width_in_bytes, video_alignment->stride_align[i]);
+    GST_DEBUG_OBJECT (framebuffersink, "Plane %d: stride alignment = %u, padded width = %u, "
+        "stride = %d", i, video_alignment->stride_align[i], padded_width, stride);
     framebuffersink->overlay_scanline_stride[i] = stride;
-    offset += GST_VIDEO_FORMAT_INFO_SCALE_HEIGHT (info->finfo, j,
+    offset += GST_VIDEO_FORMAT_INFO_SCALE_HEIGHT (info->finfo, comp[i],
         (video_alignment->padding_top + GST_VIDEO_INFO_HEIGHT (info)
         + video_alignment->padding_bottom)) * stride;
   }
@@ -1982,20 +1683,9 @@ gst_framebuffersink_set_caps (GstBaseSink * sink, GstCaps * caps)
     int first_overlay_offset;
     /* The video dimensions are different from the requested ones, or the video format is not equal */
     /* to the framebuffer format, and we are allowed to use the hardware overlay. */
-#if 0
-    klass->get_overlay_alignment_restrictions (framebuffersink, matched_overlay_format,
-        &framebuffersink->overlay_alignment, &framebuffersink->overlay_scanline_alignment,
-        &framebuffersink->overlay_plane_alignment, &framebuffersink->overlay_scanline_alignment_is_fixed);
-#endif
     if (!klass->get_overlay_video_alignment (framebuffersink, &info,
         &overlay_video_alignment, &overlay_align ,&overlay_video_alignment_matches))
       goto no_overlay;
-#if 0
-    /* If the supplied format matches the hardware restrictions, use that format, otherwise */
-    /* define a different format for overlays in video memory. */
-    if (!gst_framebuffersink_check_overlay_alignment(framebuffersink, &info, TRUE))
-      gst_framebuffersink_calculate_overlay_size(framebuffersink, &info);
-#endif
     /* Calculate the overlay total size and alignment, and plane offsets and strides in video memory. */
     gst_framebuffersink_calculate_overlay_size (framebuffersink, &info, &overlay_video_alignment,
         overlay_align, overlay_video_alignment_matches);
@@ -2164,8 +1854,8 @@ success_overlay:
 
   if (!framebuffersink->silent) {
     char s[128];
-    sprintf(s, "Using one framebuffer plus %d overlays in video memory",
-        framebuffersink->nu_overlays_used);
+    sprintf(s, "Using one framebuffer plus %d overlays in video memory (format %s)",
+        framebuffersink->nu_overlays_used, gst_video_format_to_string (matched_overlay_format));
     GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink, s);
   }
   goto finish;
@@ -2192,7 +1882,7 @@ no_display_output_size:
   }
 overlay_failed:
   {
-    GST_ERROR_OBJECT (framebuffersink,
+    GST_FRAMEBUFFERSINK_MESSAGE_OBJECT (framebuffersink,
         "Cannot not handle overlay format (hardware overlay failed)");
     GST_OBJECT_UNLOCK (framebuffersink);
     return FALSE;
