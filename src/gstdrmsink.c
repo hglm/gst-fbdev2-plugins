@@ -259,6 +259,9 @@ gst_drmsink_init (GstDrmsink *drmsink) {
      GstFramebufferSink. The option is not supported because drmsink
      doesn't support hardware scaling. */
   framebuffersink->preserve_par = FALSE;
+  /* Override the default value of the hardware-overlay property from
+     GstFramebufferSink. */
+  framebuffersink->use_hardware_overlay_property = FALSE;
 
   /* Set the initial values of the properties.*/
   drmsink->preferred_connector_id = - 1;
